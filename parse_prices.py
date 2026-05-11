@@ -3,11 +3,14 @@
 Extract vegetable prices from Hindi/Hinglish transcripts using a
 locally-running open-source LLM via Ollama.
 
-Reads:
-    data/market_transcripts_master.csv
+Behavior:
+- Reads data/market_transcripts_master.csv
+- Finds the latest date available in the CSV with transcript text
+- Parses transcripts only from that latest available date
+- Writes output to data/prices.json
 
-Writes:
-    data/prices.json
+This ensures that if there is NO new video today, the dashboard still shows
+the most recently available mandi prices from the latest uploaded video(s).
 """
 
 import os
@@ -16,11 +19,10 @@ import csv
 import re
 import time
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime
 
 CSV_FILE = "data/market_transcripts_master.csv"
 OUTPUT_FILE = "data/prices.json"
-LOOKBACK_DAYS = 7
 OLLAMA_URL = "http://localhost:11434"
 MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
 
@@ -69,7 +71,7 @@ def parse_date_flexible(date_str: str):
         "%Y-%m-%d",  # 2026-04-03
         "%d-%m-%y",  # 03-04-26
         "%d-%m-%Y",  # 03-04-2026
-        "%m-%d-%y",  # fallback if older data used MM-DD-YY
+        "%m-%d-%y",  # fallback
         "%m-%d-%Y",
     ]
 
@@ -185,17 +187,19 @@ def extract_prices(transcript: str) -> list:
         return []
 
 
-def load_recent_transcripts(csv_file: str, lookback_days: int) -> list:
+def load_latest_available_transcripts(csv_file: str) -> tuple[list, str | None]:
     """
-    Load only recent transcript rows from the master CSV.
-    Supports multiple date formats.
+    Load transcripts only from the most recent date available in the CSV.
+    Returns:
+        (rows, latest_date_str)
     """
-    cutoff = datetime.now() - timedelta(days=lookback_days)
     rows = []
 
     if not os.path.isfile(csv_file):
         print(f"CSV not found: {csv_file}")
-        return rows
+        return rows, None
+
+    parsed_rows = []
 
     with open(csv_file, encoding="utf-8-sig", errors="replace") as f:
         reader = csv.DictReader(f)
@@ -205,160 +209,18 @@ def load_recent_transcripts(csv_file: str, lookback_days: int) -> list:
             transcript = (row.get("Transcript") or "").strip()
 
             parsed_date = parse_date_flexible(date_str)
-            if parsed_date is None:
+            if parsed_date is None or not transcript:
                 continue
 
-            if parsed_date >= cutoff and transcript:
-                rows.append({
-                    "date": parsed_date.strftime("%Y-%m-%d"),
-                    "title": (row.get("Title") or "").strip(),
-                    "video_id": (row.get("Video_ID") or "").strip(),
-                    "transcript": transcript,
-                })
-
-    rows.sort(key=lambda r: r["date"], reverse=True)
-    return rows
-
-
-def merge_prices(all_entries: list) -> list:
-    """
-    Merge extracted prices across transcript entries.
-    Groups by English vegetable name and builds price history.
-    """
-    by_name = {}
-
-    for entry in all_entries:
-        date = entry["date"]
-
-        for item in entry["prices"]:
-            key = (item.get("name_en") or "").lower().strip()
-            if not key:
-                continue
-
-            if key not in by_name:
-                by_name[key] = {
-                    "name_hi": item.get("name_hi", ""),
-                    "name_en": item.get("name_en", ""),
-                    "unit": item.get("unit", "kg"),
-                    "currency": "INR",
-                    "history": [],
-                }
-
-            avg = item.get("price_avg")
-            if avg is None:
-                mn = item.get("price_min")
-                mx = item.get("price_max")
-                if mn is not None and mx is not None:
-                    avg = (mn + mx) / 2
-
-            if avg is not None:
-                try:
-                    avg = float(avg)
-                    by_name[key]["history"].append({
-                        "date": date,
-                        "price": round(avg, 2),
-                    })
-                except (ValueError, TypeError):
-                    continue
-
-    results = []
-
-    for _, veg in by_name.items():
-        history = sorted(veg["history"], key=lambda h: h["date"])
-        if not history:
-            continue
-
-        latest = history[-1]["price"]
-        prev = history[-2]["price"] if len(history) >= 2 else None
-
-        trend = "stable"
-        change_pct = 0
-
-        if prev is not None:
-            if latest > prev:
-                trend = "up"
-            elif latest < prev:
-                trend = "down"
-            else:
-                trend = "stable"
-
-            if prev != 0:
-                change_pct = round(((latest - prev) / prev) * 100, 1)
-
-        results.append({
-            "name_hi": veg["name_hi"],
-            "name_en": veg["name_en"].title(),
-            "unit": veg["unit"],
-            "currency": "INR",
-            "latest_price": latest,
-            "trend": trend,
-            "change_pct": change_pct,
-            "latest_date": history[-1]["date"],
-            "history": history[-14:],
-        })
-
-    results.sort(key=lambda v: v["name_en"])
-    return results
-
-
-def write_empty_output():
-    """Ensure prices.json exists even if nothing was extracted."""
-    output = {
-        "last_updated": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-        "source_channel": "UCxEW_BSHnu43J8-ANnSJ80w",
-        "model_used": MODEL,
-        "vegetables": [],
-    }
-
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-    print(f"Created/updated empty output: {OUTPUT_FILE}")
-
-
-def main():
-    os.makedirs("data", exist_ok=True)
-
-    if not wait_for_ollama():
-        raise RuntimeError("Ollama did not start in time.")
-
-    pull_model(MODEL)
-
-    transcripts = load_recent_transcripts(CSV_FILE, LOOKBACK_DAYS)
-    print(f"\nFound {len(transcripts)} recent transcript(s) to parse")
-
-    all_entries = []
-
-    for t in transcripts:
-        print(f"  [{t['date']}] {t['title'][:60]}")
-        prices = extract_prices(t["transcript"])
-        print(f"    -> {len(prices)} vegetable(s) found")
-
-        if prices:
-            all_entries.append({
-                "date": t["date"],
-                "prices": prices,
+            parsed_rows.append({
+                "parsed_date": parsed_date,
+                "date": parsed_date.strftime("%Y-%m-%d"),
+                "title": (row.get("Title") or "").strip(),
+                "video_id": (row.get("Video_ID") or "").strip(),
+                "transcript": transcript,
             })
 
-    if not all_entries:
-        print("No new price data extracted.")
-        write_empty_output()
-        return
+    if not parsed_rows:
+        return [], None
 
-    merged = merge_prices(all_entries)
-
-    output = {
-        "last_updated": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-        "source_channel": "UCxEW_BSHnu43J8-ANnSJ80w",
-        "model_used": MODEL,
-        "vegetables": merged,
-    }
-
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-    print(f"\nWrote {len(merged)} vegetable price(s) -> {OUTPUT_FILE}")
-
-
-if __name__ == "__main__":
-    main()
+    latest_date = max(r["parsed_date"] for r in parsed_rows)
