@@ -1,0 +1,110 @@
+name: Daily Vegetable Price Update (Open Source AI)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Create data folder and placeholder files IMMEDIATELY after checkout
+      - name: Ensure data folder and files exist
+        run: |
+          mkdir -p data
+          if [ ! -f data/market_transcripts_master.csv ]; then
+            echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
+            echo "Created empty CSV"
+          fi
+          if [ ! -f data/prices.json ]; then
+            echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
+            echo "Created empty prices.json"
+          fi
+          # Commit placeholder files right now so they exist in git history
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Data files already tracked, skipping init commit."
+          else
+            git commit -m "chore: init data folder"
+            git push
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Ollama model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}-v1
+          restore-keys: |
+            ollama-${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}-
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama server
+        run: |
+          ollama serve &
+          sleep 5
+
+      - name: Run transcript scraper
+        env:
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID || 'UCxEW_BSHnu43J8-ANnSJ80w' }}
+          MAX_NEW_VIDEOS: "5"
+        run: python scraper.py
+
+      - name: Extract vegetable prices
+        env:
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}
+        run: python parse_prices.py
+
+      - name: Commit and push updated data
+        run: |
+          git add data/market_transcripts_master.csv data/prices.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')]"
+            git pull --rebase origin main
+            for i in 1 2 3; do
+              git push origin main && break || (echo "Retry $i..." && sleep 10)
+            done
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard/
+
+  deploy-pages:
+    needs: update-prices
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
