@@ -10,7 +10,6 @@ permissions:
   pages: write
   id-token: write
 
-# Prevent parallel runs from fighting over git push
 concurrency:
   group: mandi-dashboard-update
   cancel-in-progress: false
@@ -27,19 +26,21 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Ensure data folder and base files exist
+      - name: Ensure data folder and files exist
         run: |
           mkdir -p data
 
           if [ ! -f data/market_transcripts_master.csv ]; then
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
+            echo "Created market_transcripts_master.csv"
           fi
 
           if [ ! -f data/prices.json ]; then
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
+            echo "Created prices.json"
           fi
 
-          echo "Initial data contents:"
+          echo "Current data directory:"
           ls -lah data
 
       - name: Set up Python
@@ -49,7 +50,8 @@ jobs:
           cache: "pip"
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
       - name: Cache Ollama model
         uses: actions/cache@v4
@@ -65,59 +67,67 @@ jobs:
       - name: Start Ollama server
         run: |
           ollama serve &
-          sleep 5
+          sleep 8
 
       - name: Run transcript scraper
         env:
           CHANNEL_ID: ${{ secrets.CHANNEL_ID || 'UCxEW_BSHnu43J8-ANnSJ80w' }}
           MAX_NEW_VIDEOS: "5"
-        run: python scraper.py
+        run: |
+          python scraper.py
+
+      - name: Debug CSV after scraper
+        run: |
+          echo "Checking CSV location..."
+          find . -name "market_transcripts_master.csv" || true
+          echo "Listing data directory..."
+          ls -lah data || true
 
       - name: Extract vegetable prices
         env:
           OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}
-        run: python parse_prices.py
+        run: |
+          python parse_prices.py
 
-      # Absolute safety: recreate files if scripts removed them
-      - name: Final safety check for data files
+      - name: Final safety check
         run: |
           mkdir -p data
 
           if [ ! -f data/market_transcripts_master.csv ]; then
+            echo "WARNING: CSV missing after scripts. Recreating placeholder."
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
           fi
 
           if [ ! -f data/prices.json ]; then
+            echo "WARNING: prices.json missing after scripts. Recreating placeholder."
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
           fi
 
-          echo "Final data contents:"
+          echo "Final data directory contents:"
           ls -lah data
 
       - name: Commit and push updated data
+        env:
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}
         run: |
           set -e
 
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Always sync first
           git pull --rebase origin main
-
-          # ✅ CRITICAL FIX: add directory, NOT individual files
-          git add data || true
+          git add -A data
 
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL:-gemma2:2b}"
+          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL}"
 
-          # Retry push safely
           for i in 1 2 3; do
             git push origin main && break
-            echo "Push failed, rebasing and retrying ($i)..."
+            echo "Push failed, retrying after rebase... attempt $i"
             git pull --rebase origin main
             sleep 5
           done
