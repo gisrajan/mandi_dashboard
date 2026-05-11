@@ -10,6 +10,7 @@ permissions:
   pages: write
   id-token: write
 
+# Prevent parallel runs from fighting over git push
 concurrency:
   group: mandi-dashboard-update
   cancel-in-progress: false
@@ -26,21 +27,19 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Ensure data folder and files exist
+      - name: Ensure data folder and base files exist
         run: |
           mkdir -p data
 
           if [ ! -f data/market_transcripts_master.csv ]; then
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
-            echo "Created empty CSV"
           fi
 
           if [ ! -f data/prices.json ]; then
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
-            echo "Created empty prices.json"
           fi
 
-          echo "Initial data folder contents:"
+          echo "Initial data contents:"
           ls -lah data
 
       - name: Set up Python
@@ -79,46 +78,48 @@ jobs:
           OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}
         run: python parse_prices.py
 
-      - name: Ensure output files still exist
+      # Absolute safety: recreate files if scripts removed them
+      - name: Final safety check for data files
         run: |
           mkdir -p data
 
           if [ ! -f data/market_transcripts_master.csv ]; then
-            echo "WARNING: data/market_transcripts_master.csv was missing after scripts. Recreating placeholder."
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
           fi
 
           if [ ! -f data/prices.json ]; then
-            echo "WARNING: data/prices.json was missing after scripts. Recreating placeholder."
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
           fi
 
-          echo "Final data folder contents:"
+          echo "Final data contents:"
           ls -lah data
 
       - name: Commit and push updated data
         run: |
+          set -e
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Get latest remote changes before committing
+          # Always sync first
           git pull --rebase origin main
 
-          git add data/market_transcripts_master.csv data/prices.json
+          # ✅ CRITICAL FIX: add directory, NOT individual files
+          git add data || true
 
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')]"
+          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL:-gemma2:2b}"
 
+          # Retry push safely
           for i in 1 2 3; do
             git push origin main && break
-
-            echo "Push failed. Retrying after rebase... Attempt $i"
+            echo "Push failed, rebasing and retrying ($i)..."
             git pull --rebase origin main
-            sleep 10
+            sleep 5
           done
 
       - name: Upload Pages artifact
