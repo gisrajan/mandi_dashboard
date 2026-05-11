@@ -26,6 +26,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Sync branch before running scripts
+        run: |
+          git pull --rebase origin main
+
       - name: Ensure data and dashboard folders exist
         run: |
           mkdir -p data
@@ -118,21 +122,27 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          git pull --rebase origin main
+          # Stage generated files first
           git add -A data
 
           if git diff --staged --quiet; then
             echo "No changes to commit."
-          else
-            git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL}"
-
-            for i in 1 2 3; do
-              git push origin main && break
-              echo "Push failed, retrying after rebase... attempt $i"
-              git pull --rebase origin main
-              sleep 5
-            done
+            exit 0
           fi
+
+          # Commit local changes first
+          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL}"
+
+          # Rebase onto latest remote changes
+          git pull --rebase origin main
+
+          # Push with retry loop
+          for i in 1 2 3; do
+            git push origin main && break
+            echo "Push failed, retrying after rebase... attempt $i"
+            git pull --rebase origin main
+            sleep 5
+          done
 
       - name: Copy latest prices.json into dashboard
         run: |
