@@ -1,62 +1,54 @@
-#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Scrape recent YouTube transcripts for a channel and append only NEW videos
-to data/market_transcripts_master.csv.
+YouTube transcript scraper for mandi dashboard.
 
-Logic:
-- Read existing CSV
-- Find latest date already stored
-- Collect existing Video_IDs
-- Fetch recent channel videos
-- Process only videos newer than the latest stored date, or same date but new Video_ID
-- Append transcript rows to CSV
-
-Requirements:
-    pip install youtube-transcript-api
+What it does:
+- Reads existing data/market_transcripts_master.csv
+- Finds latest date already stored
+- Collects existing Video_ID values
+- Scans the channel uploads playlist
+- Processes only videos newer than the latest CSV date
+  OR videos from the same/newer date that are not already in CSV
+- Downloads subtitles, cleans transcript text
+- Appends new rows to data/market_transcripts_master.csv
 """
 
 import os
-import csv
 import time
-import html
-import urllib.request
-import xml.etree.ElementTree as ET
+import re
+import csv
 from datetime import datetime
+import yt_dlp
 
-from youtube_transcript_api import YouTubeTranscriptApi
 
-CSV_FILE = "data/market_transcripts_master.csv"
+# --- Configuration ---
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "UCxEW_BSHnu43J8-ANnSJ80w")
 MAX_NEW_VIDEOS = int(os.environ.get("MAX_NEW_VIDEOS", "5"))
+CSV_FILE = "data/market_transcripts_master.csv"
 
-CSV_HEADERS = ["Date", "Title", "Video_ID", "Transcript"]
 
-
-def ensure_csv():
+def ensure_data_dir_and_csv():
+    """Create data directory and CSV file if they do not exist."""
     os.makedirs("data", exist_ok=True)
 
     if not os.path.isfile(CSV_FILE):
-        with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
+        with open(CSV_FILE, mode="w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
-            writer.writerow(CSV_HEADERS)
+            writer.writerow(["Date", "Title", "Video_ID", "Transcript"])
         print(f"Created new CSV: {CSV_FILE}")
 
 
-def parse_date_flexible(date_str: str):
-    """
-    Parse multiple possible date formats found in old CSVs.
-    Returns datetime.date or None.
-    """
+def parse_date_flexible(date_str):
+    """Parse multiple possible date formats from historical CSV data."""
     if not date_str:
         return None
 
     date_str = date_str.strip()
-
     formats = [
         "%Y-%m-%d",  # 2026-04-03
         "%d-%m-%y",  # 03-04-26
         "%d-%m-%Y",  # 03-04-2026
-        "%m-%d-%y",  # if old data accidentally used this
+        "%m-%d-%y",
         "%m-%d-%Y",
     ]
 
@@ -69,109 +61,202 @@ def parse_date_flexible(date_str: str):
     return None
 
 
-def load_existing_data():
+def get_existing_video_ids_and_latest_date(csv_file):
     """
-    Read CSV and return:
-      - latest_date found in the CSV
-      - set of existing video IDs
+    Reads the CSV and returns:
+    - a set of existing Video IDs
+    - the latest date found in the CSV
     """
-    latest_date = None
     existing_ids = set()
+    latest_date = None
 
-    if not os.path.isfile(CSV_FILE):
-        return latest_date, existing_ids
+    if os.path.isfile(csv_file):
+        with open(csv_file, mode="r", encoding="utf-8-sig", errors="replace") as f:
+            reader = csv.DictReader(f)
 
-    with open(CSV_FILE, "r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            vid = (row.get("Video_ID") or "").strip()
-            if vid:
-                existing_ids.add(vid)
+            for row in reader:
+                video_id = (row.get("Video_ID") or "").strip()
+                if video_id:
+                    existing_ids.add(video_id)
 
-            row_date = parse_date_flexible(row.get("Date", ""))
-            if row_date and (latest_date is None or row_date > latest_date):
-                latest_date = row_date
+                row_date = parse_date_flexible(row.get("Date", ""))
+                if row_date and (latest_date is None or row_date > latest_date):
+                    latest_date = row_date
 
-    return latest_date, existing_ids
+    return existing_ids, latest_date
 
 
-def fetch_channel_videos(channel_id: str):
+def get_channel_videos(channel_id):
     """
-    Fetch recent videos from YouTube RSS feed.
-    Returns list of dicts with date/title/video_id.
+    Scrape the channel's master uploads playlist using yt-dlp.
+    This includes videos, shorts, and livestream uploads.
     """
-    url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-    print(f"Fetching channel feed: {url}")
+    print("Scanning channel for videos... This might take a minute.")
 
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        xml_data = resp.read()
+    # Convert Channel ID (UC...) to Uploads Playlist ID (UU...)
+    if channel_id.startswith("UC"):
+        uploads_playlist_id = "UU" + channel_id[2:]
+    else:
+        uploads_playlist_id = channel_id
 
-    root = ET.fromstring(xml_data)
+    playlist_url = f"https://www.youtube.com/playlist?list={uploads_playlist_id}"
 
-    ns = {
-        "atom": "http://www.w3.org/2005/Atom",
-        "yt": "http://www.youtube.com/xml/schemas/2015",
+    ydl_opts = {
+        "extract_flat": True,
+        "quiet": True,
+        "ignoreerrors": True,
     }
 
     videos = []
-    for entry in root.findall("atom:entry", ns):
-        video_id = entry.findtext("yt:videoId", default="", namespaces=ns).strip()
-        title = entry.findtext("atom:title", default="", namespaces=ns).strip()
-        published = entry.findtext("atom:published", default="", namespaces=ns).strip()
-
-        if not video_id:
-            continue
-
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            published_dt = datetime.strptime(published, "%Y-%m-%dT%H:%M:%S%z")
-            published_date = published_dt.date()
-        except Exception:
-            continue
+            info = ydl.extract_info(playlist_url, download=False)
+            if info and "entries" in info:
+                for entry in info["entries"]:
+                    if not entry:
+                        continue
 
-        videos.append({
-            "video_id": video_id,
-            "title": html.unescape(title),
-            "published_date": published_date,
-        })
+                    video_id = entry.get("id")
+                    url = entry.get("url") or entry.get("webpage_url")
+                    title = entry.get("title", "")
 
-    videos.sort(key=lambda x: x["published_date"])
-    print(f"Found {len(videos)} recent video(s) in feed")
+                    if video_id and url:
+                        if not str(url).startswith("http"):
+                            url = f"https://www.youtube.com/watch?v={video_id}"
+
+                        videos.append({
+                            "id": video_id,
+                            "url": url,
+                            "title": title,
+                        })
+
+        except Exception as e:
+            print(f"Error fetching channel info: {e}")
+
+    print(f"Found {len(videos)} total videos on the channel.")
     return videos
 
 
-def get_transcript_text(video_id: str):
-    """
-    Try Hindi first, then English.
-    Returns transcript text or None.
-    """
-    language_preferences = [
-        ["hi", "hi-IN"],
-        ["en"],
-    ]
+def clean_vtt_text(filepath):
+    """Reads a VTT subtitle file and strips timestamps and HTML tags."""
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
 
-    for langs in language_preferences:
+        cleaned_lines = []
+        for line in lines:
+            line = line.strip()
+
+            if (
+                not line
+                or "WEBVTT" in line
+                or "-->" in line
+                or line.startswith("Kind:")
+                or line.startswith("Language:")
+            ):
+                continue
+
+            # Remove HTML tags
+            clean_line = re.sub(r"<[^>]+>", "", line)
+
+            # Avoid consecutive duplicate lines
+            if not cleaned_lines or cleaned_lines[-1] != clean_line:
+                cleaned_lines.append(clean_line)
+
+        return " ".join(cleaned_lines).strip()
+
+    except Exception as e:
+        print(f"Error reading VTT file: {e}")
+        return ""
+
+
+def process_video(video_url, video_id):
+    """
+    Downloads subtitles, extracts metadata, cleans text,
+    and returns a row dict ready to append to CSV.
+    """
+    ydl_opts = {
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": ["hi", "en"],
+        "subtitlesformat": "vtt",
+        "skip_download": True,
+
+        # Reduce rate-limit issues
+        "sleep_interval_requests": 2,
+        "sleep_interval_subtitles": 3,
+
+        "extractor_args": {
+            "youtube": ["player_client=ios", "player_client=android"]
+        },
+        "outtmpl": "%(title)s.%(ext)s",
+        "quiet": True,
+        "ignoreerrors": True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
-            text = " ".join(
-                part.get("text", "").replace("\n", " ").strip()
-                for part in transcript
-                if part.get("text", "").strip()
-            ).strip()
+            info_dict = ydl.extract_info(video_url, download=True)
+            if not info_dict:
+                print(" -> No video info returned.")
+                return None
 
-            if text:
-                return text
-        except Exception:
-            continue
+            title = info_dict.get("title", "Unknown Title")
+            raw_date = info_dict.get("upload_date", "")
 
-    return None
+            # Convert YYYYMMDD -> YYYY-MM-DD
+            if len(raw_date) == 8 and raw_date.isdigit():
+                formatted_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}"
+            else:
+                formatted_date = raw_date
+
+            # Find downloaded subtitle file
+            base_filename = os.path.splitext(ydl.prepare_filename(info_dict))[0]
+            vtt_path = None
+
+            for lang in ["hi", "en"]:
+                potential_path = f"{base_filename}.{lang}.vtt"
+                if os.path.exists(potential_path):
+                    vtt_path = potential_path
+                    break
+
+            transcript_text = ""
+            if vtt_path:
+                print(" -> Cleaning text from subtitles...")
+                transcript_text = clean_vtt_text(vtt_path)
+
+                try:
+                    os.remove(vtt_path)
+                except Exception:
+                    pass
+            else:
+                print(" -> No subtitles found for this video.")
+
+            return {
+                "Date": formatted_date,
+                "Title": title,
+                "Video_ID": video_id,
+                "Transcript": transcript_text,
+            }
+
+        except Exception as e:
+            print(f" -> An error occurred while processing {video_id}: {e}")
+            return None
 
 
-def append_rows(rows):
+def append_rows_to_csv(csv_file, rows):
+    """Append rows to the CSV."""
     if not rows:
         return
 
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+    file_exists = os.path.isfile(csv_file)
+
+    with open(csv_file, mode="a", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
+
+        if not file_exists:
+            writer.writerow(["Date", "Title", "Video_ID", "Transcript"])
+
         for row in rows:
             writer.writerow([
                 row["Date"],
@@ -181,63 +266,65 @@ def append_rows(rows):
             ])
 
 
-def main():
-    ensure_csv()
+if __name__ == "__main__":
+    ensure_data_dir_and_csv()
 
-    latest_date, existing_ids = load_existing_data()
-    print(f"Latest existing CSV date: {latest_date}")
-    print(f"Existing video IDs in CSV: {len(existing_ids)}")
+    # 1. Read existing CSV state
+    processed_ids, latest_date = get_existing_video_ids_and_latest_date(CSV_FILE)
+    print(f"Found {len(processed_ids)} videos already in the database.")
+    print(f"Latest date in CSV: {latest_date}")
 
-    videos = fetch_channel_videos(CHANNEL_ID)
+    # 2. Get all channel videos
+    all_videos = get_channel_videos(CHANNEL_ID)
+
+    # 3. Filter videos:
+    #    - skip already processed IDs
+    #    - skip videos older than latest_date
+    candidate_videos = []
+    for vid in all_videos:
+        video_id = vid["id"]
+
+        if video_id in processed_ids:
+            continue
+
+        candidate_videos.append(vid)
+
+    print(f"Unprocessed videos found: {len(candidate_videos)}")
 
     new_rows = []
     processed_count = 0
 
-    for video in videos:
+    # 4. Process candidate videos one by one
+    for index, video in enumerate(candidate_videos, start=1):
         if processed_count >= MAX_NEW_VIDEOS:
             break
 
-        video_id = video["video_id"]
-        title = video["title"]
-        published_date = video["published_date"]
+        print(f"\n--- Processing Video {index} ---")
+        print(f"ID: {video['id']}")
+        print(f"URL: {video['url']}")
 
-        # Skip if already present
-        if video_id in existing_ids:
-            continue
-
-        # Only process videos after latest_date, or if no latest_date exists
-        if latest_date is not None and published_date < latest_date:
-            continue
-
-        print(f"Processing: {published_date} | {video_id} | {title}")
-
-        transcript_text = get_transcript_text(video_id)
+        row = process_video(video["url"], video["id"])
         time.sleep(1)
 
-        if not transcript_text:
-            print(f"  No transcript found for {video_id}")
+        if not row:
             continue
 
-        new_rows.append({
-            "Date": published_date.strftime("%Y-%m-%d"),  # normalize format
-            "Title": title,
-            "Video_ID": video_id,
-            "Transcript": transcript_text,
-        })
+        row_date = parse_date_flexible(row["Date"])
 
+        # If CSV already has data, skip older videos
+        if latest_date is not None and row_date is not None and row_date < latest_date:
+            print(f" -> Skipping older video ({row['Date']})")
+            continue
+
+        new_rows.append(row)
         processed_count += 1
-        print(f"  Added transcript ({len(transcript_text)} chars)")
+        print(" -> Added to append queue.")
 
+    # 5. Append new rows
     if new_rows:
-        append_rows(new_rows)
+        append_rows_to_csv(CSV_FILE, new_rows)
         print(f"\nAppended {len(new_rows)} new row(s) to {CSV_FILE}")
     else:
         print("\nNo new videos to append.")
 
-    print(f"CSV exists: {os.path.isfile(CSV_FILE)}")
-    if os.path.isfile(CSV_FILE):
-        print(f"CSV size: {os.path.getsize(CSV_FILE)} bytes")
-
-
-if __name__ == "__main__":
-    main()
+    print("\nChannel extraction complete!")
