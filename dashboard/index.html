@@ -452,7 +452,8 @@
   async function loadData() {
     try {
       // Path is relative — prices.json lives one level up from dashboard/
-      const res = await fetch('../data/prices.json', { cache: 'no-cache' });
+      //const res = await fetch('../data/prices.json', { cache: 'no-cache' });
+      const res = await fetch('./data/prices.json', { cache: 'no-cache' });
       if (!res.ok) throw new Error('prices.json not found');
       const data = await res.json();
 
