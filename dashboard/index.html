@@ -457,8 +457,11 @@
       if (!res.ok) throw new Error('prices.json not found');
       const data = await res.json();
 
+      
+      const updatedAt = data.last_updated || 'unknown';
+      const sourceDate = data.latest_source_date || 'unknown';
       document.getElementById('last-updated').textContent =
-        'Updated: ' + (data.last_updated || 'unknown');
+        `Updated: ${updatedAt} | Source date: ${sourceDate}`;
 
       allVegs = data.vegetables || [];
       updateCounts();
