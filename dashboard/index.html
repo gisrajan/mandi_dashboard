@@ -11,22 +11,26 @@
   />
   <style>
     :root {
-      --soil:     #1a1208;
-      --bark:     #2e1f0a;
-      --turmeric: #e8a020;
-      --saffron:  #f05c1a;
-      --leaf:     #3a7d2c;
-      --mint:     #5fba47;
-      --cream:    #f5edd8;
-      --parchment:#ede0c0;
-      --dust:     #8b7355;
+      --soil:      #1a1208;
+      --bark:      #2e1f0a;
+      --turmeric:  #e8a020;
+      --saffron:   #f05c1a;
+      --leaf:      #3a7d2c;
+      --mint:      #5fba47;
+      --cream:     #f5edd8;
+      --parchment: #ede0c0;
+      --dust:      #8b7355;
       --red-chilli:#c0392b;
-      --up:       #27ae60;
-      --down:     #e74c3c;
-      --stable:   #95a5a6;
+      --up:        #27ae60;
+      --down:      #e74c3c;
+      --stable:    #95a5a6;
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       background: var(--soil);
@@ -37,7 +41,6 @@
       position: relative;
     }
 
-    /* Noise grain overlay */
     body::before {
       content: '';
       position: fixed;
@@ -48,7 +51,6 @@
       opacity: 0.4;
     }
 
-    /* Diagonal pattern background */
     body::after {
       content: '';
       position: fixed;
@@ -63,7 +65,6 @@
       pointer-events: none;
     }
 
-    /* ── Header ── */
     header {
       padding: 2.5rem 2rem 1.5rem;
       text-align: center;
@@ -105,16 +106,18 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 2rem;
+      gap: 1.5rem;
       margin-top: 1.2rem;
       font-family: 'DM Mono', monospace;
       font-size: 0.72rem;
       color: var(--dust);
       letter-spacing: 0.05em;
+      flex-wrap: wrap;
     }
 
     .meta-bar .dot {
-      width: 6px; height: 6px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: var(--mint);
       display: inline-block;
@@ -123,10 +126,9 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: 0.4; transform: scale(0.8); }
+      50% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* ── Filter Bar ── */
     .filter-bar {
       display: flex;
       align-items: center;
@@ -157,8 +159,13 @@
       transition: border-color 0.2s;
     }
 
-    .search-wrap input:focus { border-color: var(--turmeric); }
-    .search-wrap input::placeholder { color: var(--dust); }
+    .search-wrap input:focus {
+      border-color: var(--turmeric);
+    }
+
+    .search-wrap input::placeholder {
+      color: var(--dust);
+    }
 
     .search-icon {
       position: absolute;
@@ -172,6 +179,7 @@
     .sort-btns {
       display: flex;
       gap: 0.4rem;
+      flex-wrap: wrap;
     }
 
     .sort-btn {
@@ -188,22 +196,24 @@
       transition: all 0.15s;
     }
 
-    .sort-btn:hover, .sort-btn.active {
+    .sort-btn:hover,
+    .sort-btn.active {
       background: var(--turmeric);
       border-color: var(--turmeric);
       color: var(--soil);
     }
 
-    /* ── Trend Summary Bar ── */
     .trend-summary {
       display: flex;
       gap: 0;
       background: var(--bark);
       border-bottom: 2px solid var(--turmeric);
+      flex-wrap: wrap;
     }
 
     .trend-pill {
       flex: 1;
+      min-width: 140px;
       text-align: center;
       padding: 0.7rem 1rem;
       font-family: 'DM Mono', monospace;
@@ -215,9 +225,17 @@
       transition: background 0.15s;
     }
 
-    .trend-pill:last-child { border-right: none; }
-    .trend-pill:hover { background: rgba(255,255,255,0.04); }
-    .trend-pill.active-filter { background: rgba(232,160,32,0.1); }
+    .trend-pill:last-child {
+      border-right: none;
+    }
+
+    .trend-pill:hover {
+      background: rgba(255,255,255,0.04);
+    }
+
+    .trend-pill.active-filter {
+      background: rgba(232,160,32,0.1);
+    }
 
     .trend-pill .count {
       display: block;
@@ -226,16 +244,15 @@
       margin-bottom: 0.1rem;
     }
 
-    .pill-up   .count { color: var(--up); }
+    .pill-up .count { color: var(--up); }
     .pill-down .count { color: var(--down); }
     .pill-stable .count { color: var(--stable); }
-    .pill-all  .count { color: var(--turmeric); }
+    .pill-all .count { color: var(--turmeric); }
 
-    /* ── Grid ── */
     .grid-container {
-      padding: 1.5rem 2rem 4rem;
+      padding: 1.5rem 2rem 2rem;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
       gap: 1rem;
     }
 
@@ -246,7 +263,7 @@
       padding: 1.1rem 1.2rem;
       position: relative;
       overflow: hidden;
-      cursor: default;
+      cursor: pointer;
       transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
       animation: fadeUp 0.4s ease both;
     }
@@ -262,17 +279,18 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* Trend color stripe on left */
     .veg-card::before {
       content: '';
       position: absolute;
-      left: 0; top: 0; bottom: 0;
+      left: 0;
+      top: 0;
+      bottom: 0;
       width: 3px;
     }
 
-    .veg-card.trend-up::before    { background: var(--up); }
-    .veg-card.trend-down::before  { background: var(--down); }
-    .veg-card.trend-stable::before{ background: var(--stable); }
+    .veg-card.trend-up::before { background: var(--up); }
+    .veg-card.trend-down::before { background: var(--down); }
+    .veg-card.trend-stable::before { background: var(--stable); }
 
     .veg-name-hi {
       font-family: 'Tiro Devanagari Hindi', serif;
@@ -321,27 +339,91 @@
       border-radius: 2px;
     }
 
-    .trend-badge.up    { background: rgba(39,174,96,0.15);  color: var(--up); }
-    .trend-badge.down  { background: rgba(231,76,60,0.15);  color: var(--down); }
-    .trend-badge.stable{ background: rgba(149,165,166,0.12); color: var(--stable); }
+    .trend-badge.up {
+      background: rgba(39,174,96,0.15);
+      color: var(--up);
+    }
+
+    .trend-badge.down {
+      background: rgba(231,76,60,0.15);
+      color: var(--down);
+    }
+
+    .trend-badge.stable {
+      background: rgba(149,165,166,0.12);
+      color: var(--stable);
+    }
 
     .card-date {
       font-family: 'DM Mono', monospace;
       font-size: 0.62rem;
       color: var(--dust);
-      margin-top: 0.7rem;
-      opacity: 0.7;
+      margin-top: 0.55rem;
+      opacity: 0.8;
     }
 
-    /* Mini sparkline */
     .sparkline {
       margin-top: 0.8rem;
       height: 32px;
     }
 
-    .sparkline svg { display: block; }
+    .sparkline svg {
+      display: block;
+      width: 100%;
+      height: 32px;
+    }
 
-    /* ── Empty / Loading states ── */
+    .history-panel {
+      margin: 0 2rem 5rem;
+      background: var(--bark);
+      border: 1px solid rgba(232,160,32,0.12);
+      border-radius: 8px;
+      padding: 1.2rem;
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .history-header h2 {
+      font-family: 'DM Serif Display', serif;
+      color: var(--cream);
+      font-size: 1.4rem;
+    }
+
+    #history-select {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(232,160,32,0.25);
+      color: var(--cream);
+      padding: 0.5rem 0.8rem;
+      border-radius: 4px;
+      font-family: 'DM Mono', monospace;
+      min-width: 220px;
+    }
+
+    #history-chart-wrap {
+      min-height: 220px;
+    }
+
+    .history-meta {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.8rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--dust);
+    }
+
+    .history-meta strong {
+      color: var(--turmeric);
+    }
+
     .state-msg {
       grid-column: 1 / -1;
       text-align: center;
@@ -352,7 +434,8 @@
     }
 
     .spinner {
-      width: 36px; height: 36px;
+      width: 36px;
+      height: 36px;
       border: 3px solid rgba(232,160,32,0.2);
       border-top-color: var(--turmeric);
       border-radius: 50%;
@@ -360,12 +443,15 @@
       margin: 0 auto 1rem;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
 
-    /* ── Footer ── */
     footer {
       position: fixed;
-      bottom: 0; left: 0; right: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
       background: linear-gradient(transparent, var(--soil) 60%);
       padding: 1.2rem 2rem 0.8rem;
       display: flex;
@@ -382,11 +468,30 @@
       letter-spacing: 0.06em;
     }
 
-    /* ── Responsive ── */
-    @media (max-width: 600px) {
-      .filter-bar { padding: 1rem; }
-      .grid-container { padding: 1rem 1rem 4rem; }
-      .meta-bar { gap: 1rem; flex-wrap: wrap; }
+    @media (max-width: 700px) {
+      .filter-bar {
+        padding: 1rem;
+      }
+
+      .grid-container {
+        padding: 1rem 1rem 2rem;
+      }
+
+      .history-panel {
+        margin: 0 1rem 5rem;
+      }
+
+      .meta-bar {
+        gap: 0.8rem;
+      }
+
+      footer {
+        padding-left: 1rem;
+        padding-right: 1rem;
+        flex-direction: column;
+        gap: 0.3rem;
+        align-items: flex-start;
+      }
     }
   </style>
 </head>
@@ -397,7 +502,7 @@
   <h1>मंडी <span>भाव</span></h1>
   <p class="subtitle">Daily vegetable prices from the Mandi — straight from YouTube</p>
   <div class="meta-bar">
-    <span><span class="dot"></span> &nbsp;LIVE DATA</span>
+    <span><span class="dot"></span>&nbsp;LIVE DATA</span>
     <span id="last-updated">Loading…</span>
     <span id="veg-count">— vegetables</span>
   </div>
@@ -428,6 +533,7 @@
     <button class="sort-btn" onclick="setSort('price-asc', this)">₹ Low</button>
     <button class="sort-btn" onclick="setSort('price-desc', this)">₹ High</button>
     <button class="sort-btn" onclick="setSort('change', this)">Δ%</button>
+    <button class="sort-btn" onclick="setSort('max-desc', this)">Peak</button>
   </div>
 </div>
 
@@ -437,6 +543,16 @@
     Loading mandi prices…
   </div>
 </div>
+
+<section class="history-panel">
+  <div class="history-header">
+    <h2>Vegetable Price Time-Series</h2>
+    <select id="history-select" onchange="renderHistoryChart(this.value)"></select>
+  </div>
+  <div id="history-chart-wrap">
+    <div class="state-msg">Select a vegetable to view price history</div>
+  </div>
+</section>
 
 <footer>
   <span>SOURCE: YOUTUBE · AI EXTRACTION</span>
@@ -448,46 +564,59 @@
   let currentFilter = 'all';
   let currentSort = 'name';
 
-  // ─── Load data ───────────────────────────────────────────────────────────
   async function loadData() {
     try {
-      // Path is relative — prices.json lives one level up from dashboard/
-      //const res = await fetch('../data/prices.json', { cache: 'no-cache' });
-      const res = await fetch('./data/prices.json', { cache: 'no-cache' });
-      if (!res.ok) throw new Error('prices.json not found');
+      const res = await fetch(`./data/prices.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`prices.json not found (${res.status})`);
+
       const data = await res.json();
 
-      
       const updatedAt = data.last_updated || 'unknown';
       const sourceDate = data.latest_source_date || 'unknown';
+
       document.getElementById('last-updated').textContent =
         `Updated: ${updatedAt} | Source date: ${sourceDate}`;
 
-      allVegs = data.vegetables || [];
+      allVegs = Array.isArray(data.vegetables) ? data.vegetables : [];
+
       updateCounts();
+      populateHistorySelect();
       renderCards();
+
+      if (allVegs.length > 0) {
+        renderHistoryChart(allVegs[0].name_en);
+      } else {
+        document.getElementById('history-chart-wrap').innerHTML =
+          '<div class="state-msg">No live vegetable prices available</div>';
+      }
     } catch (e) {
-      // Fallback: show demo data so the dashboard looks right
+      console.error('Failed to load prices.json:', e);
+
       allVegs = getDemoData();
-      document.getElementById('last-updated').textContent = 'Demo data (prices.json not loaded)';
+      document.getElementById('last-updated').textContent =
+        'Demo data (prices.json not loaded)';
       updateCounts();
+      populateHistorySelect();
       renderCards();
+
+      if (allVegs.length > 0) {
+        renderHistoryChart(allVegs[0].name_en);
+      }
     }
   }
 
-  // ─── Counts ──────────────────────────────────────────────────────────────
   function updateCounts() {
-    const up     = allVegs.filter(v => v.trend === 'up').length;
-    const down   = allVegs.filter(v => v.trend === 'down').length;
+    const up = allVegs.filter(v => v.trend === 'up').length;
+    const down = allVegs.filter(v => v.trend === 'down').length;
     const stable = allVegs.filter(v => v.trend === 'stable').length;
-    document.getElementById('cnt-all').textContent    = allVegs.length;
-    document.getElementById('cnt-up').textContent     = up;
-    document.getElementById('cnt-down').textContent   = down;
+
+    document.getElementById('cnt-all').textContent = allVegs.length;
+    document.getElementById('cnt-up').textContent = up;
+    document.getElementById('cnt-down').textContent = down;
     document.getElementById('cnt-stable').textContent = stable;
-    document.getElementById('veg-count').textContent  = allVegs.length + ' vegetables';
+    document.getElementById('veg-count').textContent = `${allVegs.length} vegetables`;
   }
 
-  // ─── Filters / Sort ──────────────────────────────────────────────────────
   function setFilter(f, el) {
     currentFilter = f;
     document.querySelectorAll('.trend-pill').forEach(p => p.classList.remove('active-filter'));
@@ -504,49 +633,90 @@
 
   function getFiltered() {
     const q = document.getElementById('search').value.toLowerCase();
+
     let list = allVegs.filter(v => {
       const matchFilter = currentFilter === 'all' || v.trend === currentFilter;
-      const matchSearch = !q || v.name_en.toLowerCase().includes(q)
-                              || (v.name_hi || '').includes(q);
+      const matchSearch =
+        !q ||
+        (v.name_en || '').toLowerCase().includes(q) ||
+        (v.name_hi || '').includes(q);
+
       return matchFilter && matchSearch;
     });
 
     list.sort((a, b) => {
-      if (currentSort === 'name')       return a.name_en.localeCompare(b.name_en);
-      if (currentSort === 'price-asc')  return a.latest_price - b.latest_price;
-      if (currentSort === 'price-desc') return b.latest_price - a.latest_price;
-      if (currentSort === 'change')     return Math.abs(b.change_pct) - Math.abs(a.change_pct);
+      if (currentSort === 'name') {
+        return (a.name_en || '').localeCompare(b.name_en || '');
+      }
+      if (currentSort === 'price-asc') {
+        return (a.latest_price ?? 0) - (b.latest_price ?? 0);
+      }
+      if (currentSort === 'price-desc') {
+        return (b.latest_price ?? 0) - (a.latest_price ?? 0);
+      }
+      if (currentSort === 'change') {
+        return Math.abs(b.change_pct ?? 0) - Math.abs(a.change_pct ?? 0);
+      }
+      if (currentSort === 'max-desc') {
+        return (b.max_price ?? 0) - (a.max_price ?? 0);
+      }
       return 0;
     });
+
     return list;
   }
 
-  // ─── Sparkline SVG ───────────────────────────────────────────────────────
   function buildSparkline(history) {
     if (!history || history.length < 2) return '';
+
     const prices = history.map(h => h.price);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     const W = 180, H = 32, pad = 2;
-    const xStep = (W - pad * 2) / (prices.length - 1);
+    const xStep = (W - pad * 2) / Math.max(prices.length - 1, 1);
     const range = max - min || 1;
+
     const pts = prices.map((p, i) => {
       const x = pad + i * xStep;
       const y = H - pad - ((p - min) / range) * (H - pad * 2);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
+
     const color = prices[prices.length - 1] >= prices[0] ? '#27ae60' : '#e74c3c';
-    return `<div class="sparkline">
-      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-        <polyline points="${pts.join(' ')}" fill="none" stroke="${color}"
-          stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
-        <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}"
-          r="2.5" fill="${color}"/>
-      </svg>
-    </div>`;
+
+    return `
+      <div class="sparkline">
+        <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+          <polyline
+            points="${pts.join(' ')}"
+            fill="none"
+            stroke="${color}"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            opacity="0.8"
+          />
+          <circle
+            cx="${pts[pts.length - 1].split(',')[0]}"
+            cy="${pts[pts.length - 1].split(',')[1]}"
+            r="2.5"
+            fill="${color}"
+          />
+        </svg>
+      </div>
+    `;
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  function populateHistorySelect() {
+    const select = document.getElementById('history-select');
+
+    if (!select) return;
+
+    select.innerHTML = allVegs
+      .map(v => `<option value="${escapeHtml(v.name_en || '')}">${escapeHtml(v.name_hi || v.name_en || 'Unknown')} (${escapeHtml(v.name_en || 'Unknown')})</option>`)
+      .join('');
+  }
+
   function renderCards() {
     const grid = document.getElementById('grid');
     const list = getFiltered();
@@ -556,61 +726,195 @@
       return;
     }
 
-    const arrows  = { up: '▲', down: '▼', stable: '–' };
+    const arrows = { up: '▲', down: '▼', stable: '–' };
     const tLabels = { up: 'Rising', down: 'Falling', stable: 'Stable' };
 
     grid.innerHTML = list.map((v, i) => {
       const delay = Math.min(i * 30, 300);
       const trend = v.trend || 'stable';
-      const badge = `<span class="trend-badge ${trend}">
-        ${arrows[trend]} ${Math.abs(v.change_pct || 0).toFixed(1)}% ${tLabels[trend]}
-      </span>`;
+      const safeName = (v.name_en || '').replace(/'/g, "\\'");
+
+      const badge = `
+        <span class="trend-badge ${trend}">
+          ${arrows[trend]} ${Math.abs(v.change_pct || 0).toFixed(1)}% ${tLabels[trend]}
+        </span>
+      `;
+
       return `
-        <div class="veg-card trend-${trend}" style="animation-delay:${delay}ms">
-          <div class="veg-name-hi">${v.name_hi || '—'}</div>
-          <div class="veg-name-en">${v.name_en}</div>
+        <div class="veg-card trend-${trend}" style="animation-delay:${delay}ms" onclick="selectVegetable('${safeName}')">
+          <div class="veg-name-hi">${escapeHtml(v.name_hi || '—')}</div>
+          <div class="veg-name-en">${escapeHtml(v.name_en || 'Unknown')}</div>
+
           <div class="price-row">
-            <span class="price-amount">₹${v.latest_price}</span>
-            <span class="price-unit">/ ${v.unit || 'kg'}</span>
+            <span class="price-amount">₹${formatNumber(v.latest_price)}</span>
+            <span class="price-unit">/ ${escapeHtml(v.unit || 'kg')}</span>
           </div>
+
           ${badge}
+
           ${buildSparkline(v.history)}
-          <div class="card-date">${v.latest_date || ''}</div>
-        </div>`;
+
+          <div class="card-date">Latest: ${escapeHtml(v.latest_date || '')}</div>
+          <div class="card-date">Peak: ₹${formatNumber(v.max_price)} on ${escapeHtml(v.max_price_date || '—')}</div>
+          <div class="card-date">Low: ₹${formatNumber(v.min_price)} on ${escapeHtml(v.min_price_date || '—')}</div>
+        </div>
+      `;
     }).join('');
   }
 
-  // ─── Demo data (shown when prices.json unavailable) ───────────────────────
+  function selectVegetable(nameEn) {
+    const select = document.getElementById('history-select');
+    if (select) select.value = nameEn;
+    renderHistoryChart(nameEn);
+  }
+
+  function renderHistoryChart(nameEn) {
+    const veg = allVegs.find(v => v.name_en === nameEn);
+    const wrap = document.getElementById('history-chart-wrap');
+
+    if (!veg || !veg.history || veg.history.length === 0) {
+      wrap.innerHTML = '<div class="state-msg">No price history available</div>';
+      return;
+    }
+
+    const history = veg.history.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const prices = history.map(h => Number(h.price));
+    const dates = history.map(h => h.date);
+
+    const W = 900;
+    const H = 320;
+    const padL = 60;
+    const padR = 20;
+    const padT = 20;
+    const padB = 50;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = (max - min) || 1;
+
+    const xStep = history.length > 1 ? innerW / (history.length - 1) : innerW / 2;
+
+    const pts = prices.map((p, i) => {
+      const x = padL + i * xStep;
+      const y = padT + innerH - ((p - min) / range) * innerH;
+      return { x, y, p, d: dates[i] };
+    });
+
+    const polyline = pts.map(pt => `${pt.x},${pt.y}`).join(' ');
+
+    const yTicks = 5;
+    let gridLines = '';
+    for (let i = 0; i <= yTicks; i++) {
+      const y = padT + (innerH / yTicks) * i;
+      const value = (max - (range / yTicks) * i).toFixed(0);
+      gridLines += `
+        <line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(255,255,255,0.08)" />
+        <text x="${padL - 8}" y="${y + 4}" text-anchor="end" fill="#8b7355" font-size="11">₹${value}</text>
+      `;
+    }
+
+    const xLabelEvery = Math.max(1, Math.ceil(history.length / 6));
+    const xLabels = pts
+      .filter((_, i) => history.length <= 8 || i === 0 || i === history.length - 1 || i % xLabelEvery === 0)
+      .map(pt => `
+        <text x="${pt.x}" y="${H - 16}" text-anchor="middle" fill="#8b7355" font-size="11">${escapeHtml(pt.d)}</text>
+      `)
+      .join('');
+
+    const circles = pts.map(pt => `
+      <circle cx="${pt.x}" cy="${pt.y}" r="4" fill="#e8a020">
+        <title>${escapeHtml(pt.d)}: ₹${formatNumber(pt.p)}</title>
+      </circle>
+    `).join('');
+
+    wrap.innerHTML = `
+      <div>
+        <svg viewBox="0 0 ${W} ${H}" width="100%" height="320" preserveAspectRatio="xMidYMid meet">
+          ${gridLines}
+          <polyline
+            points="${polyline}"
+            fill="none"
+            stroke="#e8a020"
+            stroke-width="3"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+          ${circles}
+          ${xLabels}
+        </svg>
+
+        <div class="history-meta">
+          <span><strong>${escapeHtml(veg.name_hi || veg.name_en || 'Unknown')}</strong> (${escapeHtml(veg.name_en || 'Unknown')})</span>
+          <span>Latest: <strong>₹${formatNumber(veg.latest_price)}</strong></span>
+          <span>Peak: <strong>₹${formatNumber(veg.max_price)}</strong> on ${escapeHtml(veg.max_price_date || '—')}</span>
+          <span>Low: <strong>₹${formatNumber(veg.min_price)}</strong> on ${escapeHtml(veg.min_price_date || '—')}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function formatNumber(value) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+    return Number(value).toFixed(Number(value) % 1 === 0 ? 0 : 2);
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
   function getDemoData() {
     const items = [
-      { name_hi: 'टमाटर',     name_en: 'Tomato',     price: 28, trend: 'down',   pct: -12.5 },
-      { name_hi: 'प्याज़',     name_en: 'Onion',      price: 35, trend: 'up',     pct: 8.3  },
-      { name_hi: 'आलू',       name_en: 'Potato',     price: 22, trend: 'stable', pct: 0    },
-      { name_hi: 'हरी मिर्च',  name_en: 'Green Chilli',price: 80, trend: 'up',    pct: 25.0 },
-      { name_hi: 'बैंगन',     name_en: 'Brinjal',    price: 30, trend: 'down',   pct: -5.2 },
-      { name_hi: 'गोभी',      name_en: 'Cauliflower',price: 40, trend: 'stable', pct: 0    },
-      { name_hi: 'भिंडी',     name_en: 'Lady Finger', price: 55, trend: 'up',    pct: 15.3 },
-      { name_hi: 'पालक',      name_en: 'Spinach',    price: 20, trend: 'down',   pct: -8.0 },
-      { name_hi: 'लहसुन',     name_en: 'Garlic',     price: 200, trend: 'up',    pct: 6.7  },
-      { name_hi: 'अदरक',      name_en: 'Ginger',     price: 120, trend: 'stable',pct: 0    },
-      { name_hi: 'करेला',     name_en: 'Bitter Gourd',price: 60, trend: 'up',    pct: 10.0 },
-      { name_hi: 'शिमला मिर्च',name_en: 'Capsicum',  price: 90, trend: 'down',   pct: -4.4 },
+      { name_hi: 'टमाटर', name_en: 'Tomato', price: 28, trend: 'down', pct: -12.5 },
+      { name_hi: 'प्याज़', name_en: 'Onion', price: 35, trend: 'up', pct: 8.3 },
+      { name_hi: 'आलू', name_en: 'Potato', price: 22, trend: 'stable', pct: 0 },
+      { name_hi: 'हरी मिर्च', name_en: 'Green Chilli', price: 80, trend: 'up', pct: 25.0 },
+      { name_hi: 'बैंगन', name_en: 'Brinjal', price: 30, trend: 'down', pct: -5.2 },
+      { name_hi: 'गोभी', name_en: 'Cauliflower', price: 40, trend: 'stable', pct: 0 },
+      { name_hi: 'भिंडी', name_en: 'Lady Finger', price: 55, trend: 'up', pct: 15.3 },
+      { name_hi: 'पालक', name_en: 'Spinach', price: 20, trend: 'down', pct: -8.0 },
+      { name_hi: 'लहसुन', name_en: 'Garlic', price: 200, trend: 'up', pct: 6.7 },
+      { name_hi: 'अदरक', name_en: 'Ginger', price: 120, trend: 'stable', pct: 0 },
+      { name_hi: 'करेला', name_en: 'Bitter Gourd', price: 60, trend: 'up', pct: 10.0 },
+      { name_hi: 'शिमला मिर्च', name_en: 'Capsicum', price: 90, trend: 'down', pct: -4.4 }
     ];
-    const today = new Date().toISOString().split('T')[0];
-    return items.map(it => ({
-      name_hi: it.name_hi,
-      name_en: it.name_en,
-      latest_price: it.price,
-      unit: 'kg',
-      currency: 'INR',
-      trend: it.trend,
-      change_pct: it.pct,
-      latest_date: today,
-      history: Array.from({ length: 7 }, (_, i) => ({
-        date: new Date(Date.now() - (6 - i) * 86400000).toISOString().split('T')[0],
-        price: +(it.price * (0.9 + Math.random() * 0.2)).toFixed(0),
-      })),
-    }));
+
+    const today = new Date();
+    return items.map(it => {
+      const history = Array.from({ length: 10 }, (_, i) => {
+        const d = new Date(today.getTime() - (9 - i) * 86400000);
+        const p = +(it.price * (0.85 + Math.random() * 0.3)).toFixed(0);
+        return {
+          date: d.toISOString().split('T')[0],
+          price: p
+        };
+      });
+
+      const peak = history.reduce((a, b) => a.price >= b.price ? a : b);
+      const low = history.reduce((a, b) => a.price <= b.price ? a : b);
+
+      return {
+        name_hi: it.name_hi,
+        name_en: it.name_en,
+        latest_price: history[history.length - 1].price,
+        unit: 'kg',
+        currency: 'INR',
+        trend: it.trend,
+        change_pct: it.pct,
+        latest_date: history[history.length - 1].date,
+        max_price: peak.price,
+        max_price_date: peak.date,
+        min_price: low.price,
+        min_price_date: low.date,
+        history
+      };
+    });
   }
 
   loadData();
