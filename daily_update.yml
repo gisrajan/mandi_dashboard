@@ -10,6 +10,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: mandi-dashboard-update
+  cancel-in-progress: false
+
 jobs:
   update-prices:
     runs-on: ubuntu-latest
@@ -20,29 +24,24 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Create data folder and placeholder files IMMEDIATELY after checkout
       - name: Ensure data folder and files exist
         run: |
           mkdir -p data
+
           if [ ! -f data/market_transcripts_master.csv ]; then
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
             echo "Created empty CSV"
           fi
+
           if [ ! -f data/prices.json ]; then
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
             echo "Created empty prices.json"
           fi
-          # Commit placeholder files right now so they exist in git history
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
-          if git diff --staged --quiet; then
-            echo "Data files already tracked, skipping init commit."
-          else
-            git commit -m "chore: init data folder"
-            git push
-          fi
+
+          echo "Initial data folder contents:"
+          ls -lah data
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -80,18 +79,47 @@ jobs:
           OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}
         run: python parse_prices.py
 
+      - name: Ensure output files still exist
+        run: |
+          mkdir -p data
+
+          if [ ! -f data/market_transcripts_master.csv ]; then
+            echo "WARNING: data/market_transcripts_master.csv was missing after scripts. Recreating placeholder."
+            echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
+          fi
+
+          if [ ! -f data/prices.json ]; then
+            echo "WARNING: data/prices.json was missing after scripts. Recreating placeholder."
+            echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
+          fi
+
+          echo "Final data folder contents:"
+          ls -lah data
+
       - name: Commit and push updated data
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Get latest remote changes before committing
+          git pull --rebase origin main
+
           git add data/market_transcripts_master.csv data/prices.json
+
           if git diff --staged --quiet; then
             echo "No changes to commit."
-          else
-            git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')]"
-            git pull --rebase origin main
-            for i in 1 2 3; do
-              git push origin main && break || (echo "Retry $i..." && sleep 10)
-            done
+            exit 0
           fi
+
+          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')]"
+
+          for i in 1 2 3; do
+            git push origin main && break
+
+            echo "Push failed. Retrying after rebase... Attempt $i"
+            git pull --rebase origin main
+            sleep 10
+          done
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -104,6 +132,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
