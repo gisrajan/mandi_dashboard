@@ -20,7 +20,6 @@ import csv
 from datetime import datetime
 import yt_dlp
 
-
 # --- Configuration ---
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "UCxEW_BSHnu43J8-ANnSJ80w")
 MAX_NEW_VIDEOS = int(os.environ.get("MAX_NEW_VIDEOS", "5"))
@@ -39,7 +38,10 @@ def ensure_data_dir_and_csv():
 
 
 def parse_date_flexible(date_str):
-    """Parse multiple possible date formats from historical CSV data."""
+    """
+    Parse multiple possible date formats from historical CSV data.
+    Returns a datetime.date or None.
+    """
     if not date_str:
         return None
 
@@ -48,7 +50,7 @@ def parse_date_flexible(date_str):
         "%Y-%m-%d",  # 2026-04-03
         "%d-%m-%y",  # 03-04-26
         "%d-%m-%Y",  # 03-04-2026
-        "%m-%d-%y",
+        "%m-%d-%y",  # fallback if older data used MM-DD-YY
         "%m-%d-%Y",
     ]
 
@@ -160,7 +162,7 @@ def clean_vtt_text(filepath):
             clean_line = re.sub(r"<[^>]+>", "", line)
 
             # Avoid consecutive duplicate lines
-            if not cleaned_lines or cleaned_lines[-1] != clean_line:
+            if clean_line and (not cleaned_lines or cleaned_lines[-1] != clean_line):
                 cleaned_lines.append(clean_line)
 
         return " ".join(cleaned_lines).strip()
@@ -168,6 +170,25 @@ def clean_vtt_text(filepath):
     except Exception as e:
         print(f"Error reading VTT file: {e}")
         return ""
+
+
+def find_subtitle_file(base_filename):
+    """
+    Find downloaded subtitle file.
+    Tries Hindi and English subtitle naming patterns.
+    """
+    candidates = [
+        f"{base_filename}.hi.vtt",
+        f"{base_filename}.hi-IN.vtt",
+        f"{base_filename}.en.vtt",
+        f"{base_filename}.en-US.vtt",
+    ]
+
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    return None
 
 
 def process_video(video_url, video_id):
@@ -178,18 +199,18 @@ def process_video(video_url, video_id):
     ydl_opts = {
         "writesubtitles": True,
         "writeautomaticsub": True,
-        "subtitleslangs": ["hi", "en"],
+        "subtitleslangs": ["hi", "hi-IN", "en", "en-US"],
         "subtitlesformat": "vtt",
         "skip_download": True,
 
-        # Reduce rate-limit issues
+        # Helps reduce rate-limit issues
         "sleep_interval_requests": 2,
         "sleep_interval_subtitles": 3,
 
         "extractor_args": {
             "youtube": ["player_client=ios", "player_client=android"]
         },
-        "outtmpl": "%(title)s.%(ext)s",
+        "outtmpl": "%(title)s.%(id)s.%(ext)s",
         "quiet": True,
         "ignoreerrors": True,
     }
@@ -198,7 +219,7 @@ def process_video(video_url, video_id):
         try:
             info_dict = ydl.extract_info(video_url, download=True)
             if not info_dict:
-                print(" -> No video info returned.")
+                print(f" -> No metadata returned for video {video_id}")
                 return None
 
             title = info_dict.get("title", "Unknown Title")
@@ -210,15 +231,8 @@ def process_video(video_url, video_id):
             else:
                 formatted_date = raw_date
 
-            # Find downloaded subtitle file
             base_filename = os.path.splitext(ydl.prepare_filename(info_dict))[0]
-            vtt_path = None
-
-            for lang in ["hi", "en"]:
-                potential_path = f"{base_filename}.{lang}.vtt"
-                if os.path.exists(potential_path):
-                    vtt_path = potential_path
-                    break
+            vtt_path = find_subtitle_file(base_filename)
 
             transcript_text = ""
             if vtt_path:
@@ -240,7 +254,7 @@ def process_video(video_url, video_id):
             }
 
         except Exception as e:
-            print(f" -> An error occurred while processing {video_id}: {e}")
+            print(f" -> Error while processing {video_id}: {e}")
             return None
 
 
@@ -266,7 +280,7 @@ def append_rows_to_csv(csv_file, rows):
             ])
 
 
-if __name__ == "__main__":
+def main():
     ensure_data_dir_and_csv()
 
     # 1. Read existing CSV state
@@ -279,7 +293,6 @@ if __name__ == "__main__":
 
     # 3. Filter videos:
     #    - skip already processed IDs
-    #    - skip videos older than latest_date
     candidate_videos = []
     for vid in all_videos:
         video_id = vid["id"]
@@ -328,3 +341,7 @@ if __name__ == "__main__":
         print("\nNo new videos to append.")
 
     print("\nChannel extraction complete!")
+
+
+if __name__ == "__main__":
+    main()
