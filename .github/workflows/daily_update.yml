@@ -26,22 +26,23 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Ensure data folder and files exist
+      - name: Ensure data and dashboard folders exist
         run: |
           mkdir -p data
+          mkdir -p dashboard/data
 
           if [ ! -f data/market_transcripts_master.csv ]; then
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
-            echo "Created market_transcripts_master.csv"
+            echo "Created data/market_transcripts_master.csv"
           fi
 
           if [ ! -f data/prices.json ]; then
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
-            echo "Created prices.json"
+            echo "Created data/prices.json"
           fi
 
           echo "Current data directory:"
-          ls -lah data
+          ls -lah data || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -62,7 +63,8 @@ jobs:
             ollama-${{ vars.OLLAMA_MODEL || 'gemma2:2b' }}-
 
       - name: Install Ollama
-        run: curl -fsSL https://ollama.com/install.sh | sh
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
 
       - name: Start Ollama server
         run: |
@@ -78,7 +80,7 @@ jobs:
 
       - name: Debug CSV after scraper
         run: |
-          echo "Checking CSV location..."
+          echo "Checking for transcript CSV..."
           find . -name "market_transcripts_master.csv" || true
           echo "Listing data directory..."
           ls -lah data || true
@@ -92,19 +94,20 @@ jobs:
       - name: Final safety check
         run: |
           mkdir -p data
+          mkdir -p dashboard/data
 
           if [ ! -f data/market_transcripts_master.csv ]; then
-            echo "WARNING: CSV missing after scripts. Recreating placeholder."
+            echo "WARNING: data/market_transcripts_master.csv missing after scripts. Recreating placeholder."
             echo "Date,Title,Video_ID,Transcript" > data/market_transcripts_master.csv
           fi
 
           if [ ! -f data/prices.json ]; then
-            echo "WARNING: prices.json missing after scripts. Recreating placeholder."
+            echo "WARNING: data/prices.json missing after scripts. Recreating placeholder."
             echo '{"last_updated":"never","vegetables":[]}' > data/prices.json
           fi
 
-          echo "Final data directory contents:"
-          ls -lah data
+          echo "Final data directory:"
+          ls -lah data || true
 
       - name: Commit and push updated data
         env:
@@ -120,17 +123,28 @@ jobs:
 
           if git diff --staged --quiet; then
             echo "No changes to commit."
-            exit 0
+          else
+            git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL}"
+
+            for i in 1 2 3; do
+              git push origin main && break
+              echo "Push failed, retrying after rebase... attempt $i"
+              git pull --rebase origin main
+              sleep 5
+            done
           fi
 
-          git commit -m "chore: update mandi prices [$(date -u +'%Y-%m-%d')] via ${OLLAMA_MODEL}"
+      - name: Copy latest prices.json into dashboard
+        run: |
+          mkdir -p dashboard/data
+          cp data/prices.json dashboard/data/prices.json
+          echo "Dashboard data directory:"
+          ls -lah dashboard/data
 
-          for i in 1 2 3; do
-            git push origin main && break
-            echo "Push failed, retrying after rebase... attempt $i"
-            git pull --rebase origin main
-            sleep 5
-          done
+      - name: Debug dashboard contents
+        run: |
+          echo "Dashboard directory:"
+          find dashboard -maxdepth 2 -type f | sort
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
