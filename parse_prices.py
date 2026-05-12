@@ -9,6 +9,14 @@ Improved behavior:
 - If latest video has no mandi prices, falls back to the most recent previous date with prices
 - Preserves history from existing data/prices.json
 - Builds time-series price history for dashboard charts
+- All prices must be converted to ₹ per kg
+- Polythene bag prices: if "15 केजी पन्नी ₹X" → price per kg = X/15
+- Crate (कैरेट) of tomato ≈ 20-25 kg → divide accordingly
+- "किसान ₹X मांग रहे" → farmer_price = X
+- "खरीदार ₹X दे रहे" → buyer_price = X
+- If only one price mentioned → use as sold_price
+- Skip if price is completely ambiguous
+
 """
 
 import os
