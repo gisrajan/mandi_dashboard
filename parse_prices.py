@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
 """
-Extract vegetable prices from Hindi/Hinglish transcripts using Ollama.
+Extract vegetable mandi prices from Hindi/Hinglish transcripts using Ollama.
 
-Improved behavior:
+Behavior:
 - Reads data/market_transcripts_master.csv
 - Scans transcript dates from newest to oldest
 - Uses the newest date that ACTUALLY contains mandi prices
 - If latest video has no mandi prices, falls back to the most recent previous date with prices
 - Preserves history from existing data/prices.json
 - Builds time-series price history for dashboard charts
-- All prices must be converted to ₹ per kg
-- Polythene bag prices: if "15 केजी पन्नी ₹X" → price per kg = X/15
-- Crate (कैरेट) of tomato ≈ 20-25 kg → divide accordingly
-- "किसान ₹X मांग रहे" → farmer_price = X
-- "खरीदार ₹X दे रहे" → buyer_price = X
-- If only one price mentioned → use as sold_price
-- Skip if price is completely ambiguous
-
+- If price_avg is missing, buyer_price is used as display price
 """
 
 import os
@@ -26,6 +19,7 @@ import re
 import time
 import urllib.request
 from datetime import datetime
+from typing import Optional, Tuple, List, Dict, Any
 
 CSV_FILE = "data/market_transcripts_master.csv"
 OUTPUT_FILE = "data/prices.json"
@@ -62,13 +56,11 @@ Important extraction rules:
 1. Extract ONLY vegetables or leafy vegetable/herb items whose prices are clearly mentioned.
 2. All final prices must be converted to INR per kg.
 3. If the transcript gives a direct price per kg, use it directly.
-4. If the transcript gives a range like:
-   "20 से 30 रुपये"
-   then:
+4. If the transcript gives a range like "20 से 30 रुपये":
    - price_min = 20
    - price_max = 30
    - price_avg = 25
-5. If only one final sale price is mentioned, set:
+5. If only one final sale price is mentioned:
    - sold_price = that value
    - price_avg = that value
    - price_min = null
@@ -77,12 +69,10 @@ Important extraction rules:
    - "किसान ₹X मांग रहे" → farmer_price = X
    - "खरीदार ₹X दे रहे" → buyer_price = X
    - if only one clear market transaction price exists, treat it as sold_price
-7. If multiple prices for the same vegetable appear in the same transcript chunk, include them as separate items only if they refer to clearly different contexts.
-   Otherwise, prefer the main mandi sale price.
-8. Skip completely ambiguous prices.
-9. Do not guess missing vegetables.
-10. Do not invent units.
-11. Do not extract prices for non-vegetable products unless clearly relevant to the mandi vegetable context.
+7. Skip completely ambiguous prices.
+8. Do not guess missing vegetables.
+9. Do not invent units.
+10. Skip any non-vegetable price.
 
 Unit conversion rules:
 
@@ -94,21 +84,17 @@ A. Polythene / bag conversion:
 
 B. Tomato crate conversion:
    If tomato price is given per crate / कैरेट / क्रेट / पेटी and weight is implied as roughly 20–25 kg:
-   - If an exact weight is spoken, use that exact weight.
-   - If no exact weight is spoken and the transcript only says crate/कैरेट/क्रेट for tomato,
-     assume an approximate range of 20 to 25 kg and estimate price_avg using 22.5 kg.
-   - Example:
-     "टमाटर कैरेट 450"
-     price_avg = 450 / 22.5 = 20
-   - If you use this approximation, still return only the numeric result.
-   - Keep unit = "kg"
+   - If exact weight is spoken, use that exact weight.
+   - If no exact weight is spoken and transcript only says tomato crate price,
+     estimate price_avg using 22.5 kg.
+   Example:
+   "टमाटर कैरेट 450"
+   price_avg = 450 / 22.5 = 20
 
 C. If quantity is per dozen, piece, bunch, bundle, or any unit that cannot be reliably converted to per kg,
-   skip that item unless the transcript clearly provides enough information to convert.
+   skip that item unless enough information is provided to convert.
 
 Standardization rules:
-
-Use standardized English names where possible:
 - टमाटर → Tomato
 - प्याज़ → Onion
 - आलू → Potato
@@ -127,116 +113,31 @@ Use standardized English names where possible:
 - मटर → Peas
 - सेम → Beans
 
-Normalization rules:
+Normalization:
 - Corriander, coriander leaves, green coriander, dhaniya, धनिया, हरा धनिया → Coriander
 - Okra, ladyfinger, bhindi → Lady Finger
 - Eggplant, brinjal, बैंगन → Brinjal
 
-Price interpretation priority:
-1. sold_price
-2. farmer_price / buyer_price
-3. price range
-4. single clear market price
+If uncertain whether a price belongs to a vegetable, do not extract it.
 
-How to fill fields:
-- If only one price is available and it is the effective mandi price:
-  farmer_price = null
-  buyer_price = null
-  sold_price = X
-  price_min = null
-  price_max = null
-  price_avg = X
-
-- If a farmer vs buyer negotiation is given:
-  farmer_price = X
-  buyer_price = Y
-  sold_price = whichever is clearly stated as final deal, otherwise null
-  price_avg = sold_price if available, otherwise null
-
-- If a range is given:
-  price_min = lower
-  price_max = upper
-  price_avg = midpoint
-
-- If both a converted price and a quoted raw total are mentioned, return only the per-kg numeric values.
-
-Very important:
-- Skip any price that is too vague, incomplete, or cannot be confidently tied to a vegetable.
-- Skip any vegetable mention without a price.
-- Output ONLY valid JSON array.
-
-Examples:
-
-Input text:
-"धनिया 15 केजी पन्नी 300 रुपये बिक रही है"
-Output:
-[
-  {
-    "name_hi": "धनिया",
-    "name_en": "Coriander",
-    "farmer_price": null,
-    "buyer_price": null,
-    "sold_price": 20,
-    "price_min": null,
-    "price_max": null,
-    "price_avg": 20,
-    "unit": "kg",
-    "raw_text": "धनिया 15 केजी पन्नी 300 रुपये"
-  }
-]
-
-Input text:
-"टमाटर कैरेट 450 से 500 चल रहा है"
-Output:
-[
-  {
-    "name_hi": "टमाटर",
-    "name_en": "Tomato",
-    "farmer_price": null,
-    "buyer_price": null,
-    "sold_price": null,
-    "price_min": 20,
-    "price_max": 22.22,
-    "price_avg": 21.11,
-    "unit": "kg",
-    "raw_text": "टमाटर कैरेट 450 से 500"
-  }
-]
-
-Input text:
-"किसान 18 मांग रहे हैं, खरीदार 16 दे रहे हैं, आलू"
-Output:
-[
-  {
-    "name_hi": "आलू",
-    "name_en": "Potato",
-    "farmer_price": 18,
-    "buyer_price": 16,
-    "sold_price": null,
-    "price_min": null,
-    "price_max": null,
-    "price_avg": null,
-    "unit": "kg",
-    "raw_text": "किसान 18 मांग रहे हैं, खरीदार 16 दे रहे हैं, आलू"
-  }
-]
-
-Input text:
-"आज मौसम अच्छा है, बाजार में रौनक है"
-Output:
-[]"""
+Output ONLY a valid JSON array.
+"""
 
 
-def parse_date_flexible(date_str: str):
+# ---------------------------------------------------------------------
+# Utility functions
+# ---------------------------------------------------------------------
+
+def parse_date_flexible(date_str: str) -> Optional[datetime]:
     """Support old and new date formats."""
     if not date_str:
         return None
 
     date_str = date_str.strip()
     formats = [
-        "%Y-%m-%d",
-        "%d-%m-%y",
-        "%d-%m-%Y",
+        "%Y-%m-%d",  # 2026-05-03
+        "%d-%m-%y",  # 03-05-26
+        "%d-%m-%Y",  # 03-05-2026
         "%m-%d-%y",
         "%m-%d-%Y",
     ]
@@ -250,7 +151,46 @@ def parse_date_flexible(date_str: str):
     return None
 
 
+def chunk_text(text: str, chunk_size: int = 2500, overlap: int = 300) -> List[str]:
+    """
+    Split long transcript into overlapping chunks so later price mentions are not missed.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    chunks = []
+    start = 0
+    n = len(text)
+
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunks.append(text[start:end])
+
+        if end == n:
+            break
+
+        start = max(end - overlap, 0)
+
+    return chunks
+
+
+def to_float(value: Any) -> Optional[float]:
+    """Safe numeric conversion."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+# ---------------------------------------------------------------------
+# Ollama communication
+# ---------------------------------------------------------------------
+
 def ollama_request(payload: dict, timeout: int = 120) -> dict:
+    """Send a request to the local Ollama REST API."""
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         f"{OLLAMA_URL}/api/chat",
@@ -262,6 +202,7 @@ def ollama_request(payload: dict, timeout: int = 120) -> dict:
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read().decode("utf-8")
 
+    # Ollama streams NDJSON; concatenate content parts
     lines = [line.strip() for line in raw.strip().splitlines() if line.strip()]
     full_text = ""
 
@@ -275,7 +216,8 @@ def ollama_request(payload: dict, timeout: int = 120) -> dict:
     return {"content": full_text}
 
 
-def wait_for_ollama(retries: int = 20, delay: float = 3.0):
+def wait_for_ollama(retries: int = 20, delay: float = 3.0) -> bool:
+    """Poll until Ollama is ready."""
     print("Waiting for Ollama to be ready...", end="", flush=True)
 
     for _ in range(retries):
@@ -291,7 +233,8 @@ def wait_for_ollama(retries: int = 20, delay: float = 3.0):
     return False
 
 
-def pull_model(model: str):
+def pull_model(model: str) -> None:
+    """Pull model if not already cached."""
     print(f"Pulling model '{model}' (skipped if cached)...")
 
     payload = {"name": model}
@@ -312,43 +255,271 @@ def pull_model(model: str):
         print(f"Pull warning (may be fine if cached): {e}")
 
 
-def extract_prices(transcript: str) -> list:
-    """Extract structured prices from transcript text."""
-    transcript_trimmed = transcript[:3000]
+# ---------------------------------------------------------------------
+# Extraction helpers
+# ---------------------------------------------------------------------
 
-    payload = {
-        "model": MODEL,
-        "stream": True,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript_trimmed},
-        ],
-        "options": {
-            "temperature": 0.1,
-            "num_predict": 1024,
-        },
+def normalize_vegetable_names(item: dict) -> dict:
+    """
+    Normalize spelling variations and synonyms into a stable vegetable name.
+    """
+    name_hi = (item.get("name_hi") or "").strip()
+    name_en = (item.get("name_en") or "").strip()
+
+    key = name_en.lower().strip()
+
+    aliases = {
+        "corriander": "Coriander",
+        "coriander leaves": "Coriander",
+        "green coriander": "Coriander",
+        "dhaniya": "Coriander",
+        "coriander": "Coriander",
+        "ladyfinger": "Lady Finger",
+        "lady finger": "Lady Finger",
+        "okra": "Lady Finger",
+        "bhindi": "Lady Finger",
+        "brinjal": "Brinjal",
+        "eggplant": "Brinjal",
+        "green chilli": "Green Chilli",
+        "green chili": "Green Chilli",
+        "chilli": "Green Chilli",
+        "capsicum": "Capsicum",
+        "shimla mirch": "Capsicum",
     }
 
-    try:
-        result = ollama_request(payload, timeout=180)
-        raw = result["content"].strip()
+    hi_aliases = {
+        "धनिया": ("धनिया", "Coriander"),
+        "हरा धनिया": ("धनिया", "Coriander"),
+        "भिंडी": ("भिंडी", "Lady Finger"),
+        "बैंगन": ("बैंगन", "Brinjal"),
+        "टमाटर": ("टमाटर", "Tomato"),
+        "प्याज़": ("प्याज़", "Onion"),
+        "प्याज": ("प्याज़", "Onion"),
+        "आलू": ("आलू", "Potato"),
+        "लहसुन": ("लहसुन", "Garlic"),
+        "अदरक": ("अदरक", "Ginger"),
+        "शिमला मिर्च": ("शिमला मिर्च", "Capsicum"),
+        "हरी मिर्च": ("हरी मिर्च", "Green Chilli"),
+        "मिर्च": ("हरी मिर्च", "Green Chilli"),
+        "करेला": ("करेला", "Bitter Gourd"),
+        "लौकी": ("लौकी", "Bottle Gourd"),
+        "गोभी": ("गोभी", "Cauliflower"),
+        "फूलगोभी": ("गोभी", "Cauliflower"),
+        "पत्ता गोभी": ("पत्ता गोभी", "Cabbage"),
+        "पालक": ("पालक", "Spinach"),
+        "मटर": ("मटर", "Peas"),
+        "सेम": ("सेम", "Beans"),
+    }
 
-        raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw, flags=re.IGNORECASE)
-        raw = re.sub(r"\n?```$", "", raw)
+    if name_hi in hi_aliases:
+        fixed_hi, fixed_en = hi_aliases[name_hi]
+        item["name_hi"] = fixed_hi
+        item["name_en"] = fixed_en
+        return item
 
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+    if key in aliases:
+        item["name_en"] = aliases[key]
+        if item["name_en"] == "Coriander" and not item.get("name_hi"):
+            item["name_hi"] = "धनिया"
 
-        return json.loads(raw)
+    return item
 
-    except Exception as e:
-        print(f"  -> Extraction error: {e}")
+
+def choose_display_price(item: dict) -> Tuple[Optional[float], Optional[str]]:
+    """
+    Choose which price should be used as the effective display price.
+
+    Priority:
+    1. price_avg
+    2. buyer_price
+    3. sold_price
+    4. farmer_price
+    5. midpoint of price_min/price_max
+    """
+    price_avg = to_float(item.get("price_avg"))
+    if price_avg is not None:
+        return price_avg, "price_avg"
+
+    buyer_price = to_float(item.get("buyer_price"))
+    if buyer_price is not None:
+        return buyer_price, "buyer_price"
+
+    sold_price = to_float(item.get("sold_price"))
+    if sold_price is not None:
+        return sold_price, "sold_price"
+
+    farmer_price = to_float(item.get("farmer_price"))
+    if farmer_price is not None:
+        return farmer_price, "farmer_price"
+
+    price_min = to_float(item.get("price_min"))
+    price_max = to_float(item.get("price_max"))
+    if price_min is not None and price_max is not None:
+        return (price_min + price_max) / 2, "range_midpoint"
+
+    return None, None
+
+
+def normalize_price_entry(item: dict) -> Optional[dict]:
+    """
+    Normalize one extracted vegetable price entry.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    item = normalize_vegetable_names(item)
+
+    name_en = (item.get("name_en") or "").strip()
+    if not name_en:
+        return None
+
+    chosen_price, chosen_type = choose_display_price(item)
+    if chosen_price is None:
+        return None
+
+    return {
+        "name_hi": (item.get("name_hi") or "").strip(),
+        "name_en": name_en.title(),
+        "unit": (item.get("unit") or "kg").strip(),
+        "currency": "INR",
+        "price": round(float(chosen_price), 2),
+        "price_type": chosen_type,
+        "buyer_price": to_float(item.get("buyer_price")),
+        "sold_price": to_float(item.get("sold_price")),
+        "farmer_price": to_float(item.get("farmer_price")),
+        "price_avg": to_float(item.get("price_avg")),
+        "raw_text": (item.get("raw_text") or "").strip(),
+    }
+
+
+def extract_prices(transcript: str) -> List[dict]:
+    """
+    Extract structured prices from the FULL transcript using chunking.
+    """
+    chunks = chunk_text(transcript, chunk_size=2500, overlap=300)
+    if not chunks:
         return []
 
+    raw_items = []
 
-def load_all_transcripts(csv_file: str) -> list:
-    """Load all transcript rows with valid dates."""
+    for idx, chunk in enumerate(chunks, start=1):
+        print(f"    -> Parsing transcript chunk {idx}/{len(chunks)}")
+
+        payload = {
+            "model": MODEL,
+            "stream": True,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Extract all clearly stated vegetable mandi prices from the following Hindi/Hinglish transcript chunk.\n\nTranscript:\n{chunk}"
+                },
+            ],
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 1024,
+            },
+        }
+
+        try:
+            result = ollama_request(payload, timeout=180)
+            raw = result["content"].strip()
+
+            # Remove markdown fences if present
+            raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"\n?```$", "", raw)
+
+            match = re.search(r"\[.*\]", raw, re.DOTALL)
+            parsed = json.loads(match.group()) if match else json.loads(raw)
+
+            if isinstance(parsed, list):
+                raw_items.extend(parsed)
+
+        except Exception as e:
+            print(f"      Extraction error in chunk {idx}: {e}")
+
+    # Normalize + merge duplicate vegetables across chunks
+    merged: Dict[str, dict] = {}
+
+    for item in raw_items:
+        norm = normalize_price_entry(item)
+        if not norm:
+            continue
+
+        key = norm["name_en"].lower()
+
+        if key not in merged:
+            merged[key] = {
+                "name_hi": norm["name_hi"],
+                "name_en": norm["name_en"],
+                "unit": norm["unit"],
+                "currency": norm["currency"],
+                "prices": [],
+                "buyer_prices": [],
+                "sold_prices": [],
+                "farmer_prices": [],
+                "price_avgs": [],
+                "raw_texts": [],
+                "price_type_counts": {},
+            }
+
+        merged[key]["prices"].append(norm["price"])
+
+        if norm["buyer_price"] is not None:
+            merged[key]["buyer_prices"].append(norm["buyer_price"])
+        if norm["sold_price"] is not None:
+            merged[key]["sold_prices"].append(norm["sold_price"])
+        if norm["farmer_price"] is not None:
+            merged[key]["farmer_prices"].append(norm["farmer_price"])
+        if norm["price_avg"] is not None:
+            merged[key]["price_avgs"].append(norm["price_avg"])
+        if norm["raw_text"]:
+            merged[key]["raw_texts"].append(norm["raw_text"])
+
+        merged[key]["price_type_counts"][norm["price_type"]] = (
+            merged[key]["price_type_counts"].get(norm["price_type"], 0) + 1
+        )
+
+        # Prefer a non-empty Hindi name if found later
+        if norm["name_hi"]:
+            merged[key]["name_hi"] = norm["name_hi"]
+
+    final = []
+
+    for veg in merged.values():
+        effective_price = round(sum(veg["prices"]) / len(veg["prices"]), 2)
+
+        buyer_price = round(sum(veg["buyer_prices"]) / len(veg["buyer_prices"]), 2) if veg["buyer_prices"] else None
+        sold_price = round(sum(veg["sold_prices"]) / len(veg["sold_prices"]), 2) if veg["sold_prices"] else None
+        farmer_price = round(sum(veg["farmer_prices"]) / len(veg["farmer_prices"]), 2) if veg["farmer_prices"] else None
+        price_avg = round(sum(veg["price_avgs"]) / len(veg["price_avgs"]), 2) if veg["price_avgs"] else None
+
+        # pick the most frequent source type
+        price_type = max(veg["price_type_counts"], key=veg["price_type_counts"].get)
+
+        final.append({
+            "name_hi": veg["name_hi"],
+            "name_en": veg["name_en"],
+            "unit": veg["unit"],
+            "currency": veg["currency"],
+            "display_price": effective_price,
+            "price_type": price_type,
+            "buyer_price": buyer_price,
+            "sold_price": sold_price,
+            "farmer_price": farmer_price,
+            "price_avg": price_avg,
+            "raw_text": " | ".join(veg["raw_texts"][:3]),  # keep it compact
+        })
+
+    return final
+
+
+# ---------------------------------------------------------------------
+# CSV loading and date selection
+# ---------------------------------------------------------------------
+
+def load_all_transcripts(csv_file: str) -> List[dict]:
+    """Load all transcript rows with valid dates and non-empty transcript."""
     rows = []
 
     if not os.path.isfile(csv_file):
@@ -361,8 +532,8 @@ def load_all_transcripts(csv_file: str) -> list:
         for row in reader:
             date_str = (row.get("Date") or "").strip()
             transcript = (row.get("Transcript") or "").strip()
-
             parsed_date = parse_date_flexible(date_str)
+
             if parsed_date is None or not transcript:
                 continue
 
@@ -378,47 +549,14 @@ def load_all_transcripts(csv_file: str) -> list:
     return rows
 
 
-def group_transcripts_by_date(rows: list) -> dict:
-    grouped = {}
+def group_transcripts_by_date(rows: List[dict]) -> Dict[str, List[dict]]:
+    grouped: Dict[str, List[dict]] = {}
     for row in rows:
         grouped.setdefault(row["date"], []).append(row)
     return grouped
 
 
-def normalize_price_entry(item: dict) -> dict | None:
-    """Normalize one extracted vegetable price entry."""
-    name_en = (item.get("name_en") or "").strip()
-    if not name_en:
-        return None
-
-    avg = item.get("price_avg")
-    if avg is None:
-        mn = item.get("price_min")
-        mx = item.get("price_max")
-        if mn is not None and mx is not None:
-            try:
-                avg = (float(mn) + float(mx)) / 2
-            except Exception:
-                avg = None
-
-    if avg is None:
-        return None
-
-    try:
-        avg = round(float(avg), 2)
-    except Exception:
-        return None
-
-    return {
-        "name_hi": (item.get("name_hi") or "").strip(),
-        "name_en": name_en.strip().title(),
-        "unit": (item.get("unit") or "kg").strip(),
-        "currency": "INR",
-        "price": avg,
-    }
-
-
-def pick_latest_price_bearing_date(transcripts: list) -> tuple[str | None, list]:
+def pick_latest_price_bearing_date(transcripts: List[dict]) -> Tuple[Optional[str], List[dict]]:
     """
     Starting from newest date, find the first date that yields any mandi prices.
     Returns:
@@ -428,35 +566,31 @@ def pick_latest_price_bearing_date(transcripts: list) -> tuple[str | None, list]
         return None, []
 
     grouped = group_transcripts_by_date(transcripts)
-
-    # Sort dates descending
     dates = sorted(grouped.keys(), reverse=True)
 
     for date_str in dates:
         print(f"\nTrying transcript date: {date_str}")
         day_rows = grouped[date_str]
-        extracted = []
+        extracted_items = []
 
         for row in day_rows:
-            print(f"  Parsing: {row['title'][:70]}")
+            print(f"  Parsing: {row['title'][:80]}")
             prices = extract_prices(row["transcript"])
-            print(f"    -> {len(prices)} extracted item(s)")
-            extracted.extend(prices)
+            print(f"    -> {len(prices)} normalized price item(s)")
+            extracted_items.extend(prices)
 
-        normalized = []
-        for item in extracted:
-            norm = normalize_price_entry(item)
-            if norm:
-                normalized.append(norm)
-
-        if normalized:
+        if extracted_items:
             print(f"Using latest price-bearing date: {date_str}")
-            return date_str, normalized
+            return date_str, extracted_items
 
         print(f"No mandi prices found on {date_str}, checking older date...")
 
     return None, []
 
+
+# ---------------------------------------------------------------------
+# Existing output loading / merging
+# ---------------------------------------------------------------------
 
 def load_existing_output() -> dict:
     """Load existing prices.json if available."""
@@ -470,12 +604,11 @@ def load_existing_output() -> dict:
         return {}
 
 
-def build_history_map(existing_output: dict) -> dict:
+def build_history_map(existing_output: dict) -> Dict[str, dict]:
     """
-    Convert existing vegetables history into a map:
-    key -> vegetable name_en lower
+    Convert existing vegetables history into a map keyed by name_en lowercase.
     """
-    history_map = {}
+    history_map: Dict[str, dict] = {}
     vegetables = existing_output.get("vegetables", [])
 
     for veg in vegetables:
@@ -494,7 +627,16 @@ def build_history_map(existing_output: dict) -> dict:
     return history_map
 
 
-def upsert_history_point(history: list, date_str: str, price: float):
+def upsert_history_point(
+    history: List[dict],
+    date_str: str,
+    price: float,
+    price_type: str,
+    buyer_price: Optional[float],
+    sold_price: Optional[float],
+    farmer_price: Optional[float],
+    price_avg: Optional[float],
+) -> None:
     """
     Insert or replace a history point for a given date.
     Keeps unique dates.
@@ -504,6 +646,11 @@ def upsert_history_point(history: list, date_str: str, price: float):
     for item in history:
         if item.get("date") == date_str:
             item["price"] = round(float(price), 2)
+            item["price_type"] = price_type
+            item["buyer_price"] = buyer_price
+            item["sold_price"] = sold_price
+            item["farmer_price"] = farmer_price
+            item["price_avg"] = price_avg
             replaced = True
             break
 
@@ -511,15 +658,20 @@ def upsert_history_point(history: list, date_str: str, price: float):
         history.append({
             "date": date_str,
             "price": round(float(price), 2),
+            "price_type": price_type,
+            "buyer_price": buyer_price,
+            "sold_price": sold_price,
+            "farmer_price": farmer_price,
+            "price_avg": price_avg,
         })
 
     history.sort(key=lambda x: x["date"])
 
 
-def merge_current_prices_with_existing(existing_output: dict, source_date: str, current_prices: list) -> list:
+def merge_current_prices_with_existing(existing_output: dict, source_date: str, current_prices: List[dict]) -> List[dict]:
     """
-    Merge newly extracted current prices into existing history.
-    This preserves old history and updates only with the newest valid price-bearing date.
+    Merge newly extracted prices into existing history.
+    Preserves old history and updates only with the newest valid price-bearing date.
     """
     history_map = build_history_map(existing_output)
 
@@ -535,14 +687,23 @@ def merge_current_prices_with_existing(existing_output: dict, source_date: str, 
                 "history": [],
             }
 
-        # update names/unit if blank in old data
+        # Update canonical metadata
         if item["name_hi"]:
             history_map[key]["name_hi"] = item["name_hi"]
         history_map[key]["name_en"] = item["name_en"]
         history_map[key]["unit"] = item["unit"]
         history_map[key]["currency"] = item["currency"]
 
-        upsert_history_point(history_map[key]["history"], source_date, item["price"])
+        upsert_history_point(
+            history=history_map[key]["history"],
+            date_str=source_date,
+            price=item["display_price"],
+            price_type=item["price_type"],
+            buyer_price=item["buyer_price"],
+            sold_price=item["sold_price"],
+            farmer_price=item["farmer_price"],
+            price_avg=item["price_avg"],
+        )
 
     # Build final vegetable output
     result = []
@@ -552,11 +713,12 @@ def merge_current_prices_with_existing(existing_output: dict, source_date: str, 
         if not history:
             continue
 
-        latest = history[-1]["price"]
+        latest_point = history[-1]
+        latest = latest_point["price"]
         prev = history[-2]["price"] if len(history) >= 2 else None
 
         trend = "stable"
-        change_pct = 0
+        change_pct = 0.0
 
         if prev is not None:
             if latest > prev:
@@ -577,22 +739,31 @@ def merge_current_prices_with_existing(existing_output: dict, source_date: str, 
             "name_en": veg["name_en"],
             "unit": veg["unit"],
             "currency": veg["currency"],
-            "latest_price": latest,
+            "latest_price": latest_point["price"],
+            "latest_price_type": latest_point.get("price_type", "price_avg"),
+            "buyer_price": latest_point.get("buyer_price"),
+            "sold_price": latest_point.get("sold_price"),
+            "farmer_price": latest_point.get("farmer_price"),
+            "price_avg": latest_point.get("price_avg"),
             "trend": trend,
             "change_pct": change_pct,
-            "latest_date": history[-1]["date"],
+            "latest_date": latest_point["date"],
             "max_price": peak_point["price"],
             "max_price_date": peak_point["date"],
             "min_price": low_point["price"],
             "min_price_date": low_point["date"],
-            "history": history[-60:],  # keep more history for charting
+            "history": history[-60:],  # keep enough history for charts
         })
 
     result.sort(key=lambda v: v["name_en"])
     return result
 
 
-def write_output(existing_output: dict, source_date: str | None, vegetables: list):
+# ---------------------------------------------------------------------
+# Output writing
+# ---------------------------------------------------------------------
+
+def write_output(source_date: Optional[str], vegetables: List[dict]) -> None:
     output = {
         "last_updated": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
         "latest_source_date": source_date,
@@ -607,7 +778,11 @@ def write_output(existing_output: dict, source_date: str | None, vegetables: lis
     print(f"Wrote {len(vegetables)} vegetable(s) -> {OUTPUT_FILE}")
 
 
-def main():
+# ---------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------
+
+def main() -> None:
     os.makedirs("data", exist_ok=True)
 
     if not wait_for_ollama():
@@ -625,7 +800,7 @@ def main():
         if existing_output:
             print("Keeping existing prices.json")
             return
-        write_output({}, None, [])
+        write_output(None, [])
         return
 
     source_date, current_prices = pick_latest_price_bearing_date(transcripts)
@@ -635,21 +810,18 @@ def main():
         if existing_output:
             print("Keeping existing prices.json")
             return
-        write_output({}, None, [])
+        write_output(None, [])
         return
 
     existing_source_date = existing_output.get("latest_source_date")
-
-    # If same price-bearing date already active, keep history but refresh metadata
     merged_vegetables = merge_current_prices_with_existing(existing_output, source_date, current_prices)
 
-    # Optional optimization: if nothing meaningful changed, still refresh timestamp
     if existing_source_date == source_date:
-        print(f"Latest valid mandi-price date unchanged ({source_date}). Refreshing output only.")
+        print(f"Latest valid mandi-price date unchanged ({source_date}). Refreshing output.")
     else:
         print(f"Switching dashboard source date from {existing_source_date} -> {source_date}")
 
-    write_output(existing_output, source_date, merged_vegetables)
+    write_output(source_date, merged_vegetables)
 
 
 if __name__ == "__main__":
