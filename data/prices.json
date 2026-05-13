@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-05-13 04:20 UTC",
+  "last_updated": "2026-05-13 07:04 UTC",
   "latest_source_date": "2026-04-17",
   "source_channel": "UCxEW_BSHnu43J8-ANnSJ80w",
   "model_used": "gemma2:2b",
@@ -9,18 +9,28 @@
       "name_en": "Coriander",
       "unit": "kg",
       "currency": "INR",
-      "latest_price": 60.0,
+      "latest_price": 65.0,
+      "latest_price_type": "price_avg",
+      "buyer_price": 70.0,
+      "sold_price": null,
+      "farmer_price": 60.0,
+      "price_avg": 65.0,
       "trend": "stable",
-      "change_pct": 0,
+      "change_pct": 0.0,
       "latest_date": "2026-04-17",
-      "max_price": 60.0,
+      "max_price": 65.0,
       "max_price_date": "2026-04-17",
-      "min_price": 60.0,
+      "min_price": 65.0,
       "min_price_date": "2026-04-17",
       "history": [
         {
           "date": "2026-04-17",
-          "price": 60.0
+          "price": 65.0,
+          "price_type": "price_avg",
+          "buyer_price": 70.0,
+          "sold_price": null,
+          "farmer_price": 60.0,
+          "price_avg": 65.0
         }
       ]
     }
