@@ -325,7 +325,7 @@ def main():
         row_date = parse_date_flexible(row["Date"])
 
         # If CSV already has data, skip older videos
-        if latest_date is not None and row_date is not None and row_date < latest_date:
+        if latest_date is not None and row_date is not None and row_date <= latest_date:
             print(f" -> Skipping older video ({row['Date']})")
             continue
 
