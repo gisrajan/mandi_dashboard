@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-05-26 09:46 UTC",
+  "last_updated": "2026-05-27 03:11 UTC",
   "latest_source_date": "2026-04-17",
   "source_channel": "UCxEW_BSHnu43J8-ANnSJ80w",
-  "model_used": "gemma2:2b",
+  "model_used": "qwen2.5:7b",
   "vegetables": [
     {
       "name_hi": "धनिया",
@@ -11,9 +11,9 @@
       "currency": "INR",
       "latest_price": 65.0,
       "latest_price_type": "price_avg",
-      "buyer_price": 70.0,
+      "buyer_price": null,
       "sold_price": null,
-      "farmer_price": 60.0,
+      "farmer_price": null,
       "price_avg": 65.0,
       "trend": "stable",
       "change_pct": 0.0,
@@ -27,9 +27,9 @@
           "date": "2026-04-17",
           "price": 65.0,
           "price_type": "price_avg",
-          "buyer_price": 70.0,
+          "buyer_price": null,
           "sold_price": null,
-          "farmer_price": 60.0,
+          "farmer_price": null,
           "price_avg": 65.0
         }
       ]
