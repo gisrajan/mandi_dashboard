@@ -151,7 +151,7 @@ def parse_date_flexible(date_str: str) -> Optional[datetime]:
     return None
 
 
-def chunk_text(text: str, chunk_size: int = 2500, overlap: int = 300) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 300) -> List[str]:
     """
     Split long transcript into overlapping chunks so later price mentions are not missed.
     """
