@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-05-27 03:11 UTC",
+  "last_updated": "2026-05-27 03:34 UTC",
   "latest_source_date": "2026-04-17",
   "source_channel": "UCxEW_BSHnu43J8-ANnSJ80w",
   "model_used": "qwen2.5:7b",
@@ -12,7 +12,7 @@
       "latest_price": 65.0,
       "latest_price_type": "price_avg",
       "buyer_price": null,
-      "sold_price": null,
+      "sold_price": 65.0,
       "farmer_price": null,
       "price_avg": 65.0,
       "trend": "stable",
@@ -28,7 +28,7 @@
           "price": 65.0,
           "price_type": "price_avg",
           "buyer_price": null,
-          "sold_price": null,
+          "sold_price": 65.0,
           "farmer_price": null,
           "price_avg": 65.0
         }
