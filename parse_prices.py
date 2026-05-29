@@ -372,7 +372,14 @@ def extract_prices(transcript: str) -> List[dict]:
         try:
             result = ollama_request(payload, timeout=180)
             raw = result["content"].strip()
-            print(f"--- RAW LLM OUTPUT ---\n{raw}\n----------------------")
+
+            # ===== CRITICAL GITHUB DEBUG PRINTS =====
+            print(f"\n================ [DEBUG] RAW LLM CHUNK OUTPUT ================")
+            print(raw)
+            print(f"==============================================================\n")
+            # =======================================
+
+          
             # Remove markdown fences if present
             raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw, flags=re.IGNORECASE)
             raw = re.sub(r"\n?```$", "", raw)
