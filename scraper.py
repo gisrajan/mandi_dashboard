@@ -24,6 +24,7 @@ import yt_dlp
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "UCxEW_BSHnu43J8-ANnSJ80w")
 MAX_NEW_VIDEOS = int(os.environ.get("MAX_NEW_VIDEOS", "5"))
 CSV_FILE = "data/market_transcripts_master.csv"
+COOKIE_FILE = "data/youtube_cookies.txt"
 
 
 def ensure_data_dir_and_csv():
@@ -35,6 +36,13 @@ def ensure_data_dir_and_csv():
             writer = csv.writer(f)
             writer.writerow(["Date", "Title", "Video_ID", "Transcript"])
         print(f"Created new CSV: {CSV_FILE}")
+
+    # Set up cookies if passed from environment secrets
+    env_cookies = os.environ.get("YOUTUBE_COOKIES")
+    if env_cookies:
+        with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+            f.write(env_cookies.strip())
+        print("Generated temporary YouTube cookie file for authentication.")
 
 
 def parse_date_flexible(date_str):
@@ -108,6 +116,9 @@ def get_channel_videos(channel_id):
         "quiet": True,
         "ignoreerrors": True,
     }
+
+    if os.path.exists(COOKIE_FILE):
+        ydl_opts["cookiefile"] = COOKIE_FILE
 
     videos = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -203,23 +214,31 @@ def process_video(video_url, video_id):
         "subtitlesformat": "vtt",
         "skip_download": True,
 
-        # Helps reduce rate-limit issues
-        "sleep_interval_requests": 2,
+        # Throttling to bypass anti-scraping
+        "sleep_interval_requests": 3,
         "sleep_interval_subtitles": 3,
 
+        # Mitigate cloud runner bot detection
         "extractor_args": {
-            "youtube": ["player_client=ios", "player_client=android"]
+            "youtube": {
+                "player_client": ["android", "web_embedded"],
+                "skip": ["dash", "hls"]
+            }
         },
         "outtmpl": "%(title)s.%(id)s.%(ext)s",
         "quiet": True,
         "ignoreerrors": True,
     }
 
+    # Apply cookie file if present
+    if os.path.exists(COOKIE_FILE):
+        ydl_opts["cookiefile"] = COOKIE_FILE
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info_dict = ydl.extract_info(video_url, download=True)
             if not info_dict:
-                print(f" -> No metadata returned for video {video_id}")
+                print(f" -> No metadata returned for video {video_id} (Check authentication/bot walls)")
                 return None
 
             title = info_dict.get("title", "Unknown Title")
@@ -244,7 +263,7 @@ def process_video(video_url, video_id):
                 except Exception:
                     pass
             else:
-                print(" -> No subtitles found for this video.")
+                print(" -> No subtitles found or couldn't be extracted for this video.")
 
             return {
                 "Date": formatted_date,
@@ -339,6 +358,13 @@ def main():
         print(f"\nAppended {len(new_rows)} new row(s) to {CSV_FILE}")
     else:
         print("\nNo new videos to append.")
+
+    # Clean up cookie file at execution end
+    if os.path.exists(COOKIE_FILE):
+        try:
+            os.remove(COOKIE_FILE)
+        except Exception:
+            pass
 
     print("\nChannel extraction complete!")
 
