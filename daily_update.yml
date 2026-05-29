@@ -78,6 +78,7 @@ jobs:
         env:
           CHANNEL_ID: ${{ secrets.CHANNEL_ID || 'UCxEW_BSHnu43J8-ANnSJ80w' }}
           MAX_NEW_VIDEOS: "5"
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           python scraper.py
 
