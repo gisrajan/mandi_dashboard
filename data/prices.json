@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-07-03 09:15 UTC",
+  "last_updated": "2026-07-04 08:56 UTC",
   "latest_source_date": "2026-06-10",
   "source_channel": "UCxEW_BSHnu43J8-ANnSJ80w",
   "model_used": "qwen2.5:7b",
@@ -9,28 +9,28 @@
       "name_en": "Cabbage",
       "unit": "केजी",
       "currency": "INR",
-      "latest_price": 100.0,
+      "latest_price": 97.5,
       "latest_price_type": "price_avg",
       "buyer_price": null,
-      "sold_price": 100.0,
+      "sold_price": null,
       "farmer_price": null,
-      "price_avg": 100.0,
+      "price_avg": 97.5,
       "trend": "stable",
       "change_pct": 0.0,
       "latest_date": "2026-06-10",
-      "max_price": 100.0,
+      "max_price": 97.5,
       "max_price_date": "2026-06-10",
-      "min_price": 100.0,
+      "min_price": 97.5,
       "min_price_date": "2026-06-10",
       "history": [
         {
           "date": "2026-06-10",
-          "price": 100.0,
+          "price": 97.5,
           "price_type": "price_avg",
           "buyer_price": null,
-          "sold_price": 100.0,
+          "sold_price": null,
           "farmer_price": null,
-          "price_avg": 100.0
+          "price_avg": 97.5
         }
       ]
     },
